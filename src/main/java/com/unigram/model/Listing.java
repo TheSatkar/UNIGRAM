@@ -24,6 +24,8 @@ public class Listing {
     private String badge;
     private String status; // "pending", "approved", "rejected", "sold"
     private String pendingType; // "new", "edit", null
+    private String sellerName;
+    private String pendingEdit;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
     private List<String> photos = new ArrayList<>();
@@ -95,6 +97,12 @@ public class Listing {
 
     public LocalDateTime getUpdatedAt() { return updatedAt; }
     public void setUpdatedAt(LocalDateTime updatedAt) { this.updatedAt = updatedAt; }
+
+    public String getSellerName() { return sellerName; }
+    public void setSellerName(String sellerName) { this.sellerName = sellerName; }
+
+    public String getPendingEdit() { return pendingEdit; }
+    public void setPendingEdit(String pendingEdit) { this.pendingEdit = pendingEdit; }
 
     public List<String> getPhotos() { return photos; }
     public void setPhotos(List<String> photos) { this.photos = photos != null ? photos : new ArrayList<>(); }

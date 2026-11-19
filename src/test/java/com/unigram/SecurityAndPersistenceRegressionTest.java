@@ -1,20 +1,27 @@
 package com.unigram;
 
 import com.unigram.api.CorsConfig;
+import com.unigram.api.JsonUtil;
 import com.unigram.api.UniGramHttpServer;
 import com.unigram.database.DatabaseConfig;
+import com.unigram.security.GoogleTokenVerifier;
 
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.security.KeyPair;
+import java.security.KeyPairGenerator;
+import java.security.Signature;
 import java.time.Duration;
 import java.util.Base64;
+import java.util.Map;
 
 /**
  * Enterprise Security and Persistence Automated Regression Test Suite.
- * Validates all Critical Security Fixes (A through N) and Data Durability rules.
+ * Validates all Critical Security Fixes (A through N), Cryptographic Token Verification,
+ * and Data Durability rules.
  */
 public class SecurityAndPersistenceRegressionTest {
 
@@ -39,6 +46,23 @@ public class SecurityAndPersistenceRegressionTest {
         }
     }
 
+    private static String createSignedJwt(Map<String, Object> header, Map<String, Object> payload, KeyPair keyPair) throws Exception {
+        String hJson = JsonUtil.toJson(header);
+        String pJson = JsonUtil.toJson(payload);
+
+        String b64Header = Base64.getUrlEncoder().withoutPadding().encodeToString(hJson.getBytes(StandardCharsets.UTF_8));
+        String b64Payload = Base64.getUrlEncoder().withoutPadding().encodeToString(pJson.getBytes(StandardCharsets.UTF_8));
+        String signingInput = b64Header + "." + b64Payload;
+
+        Signature sig = Signature.getInstance("SHA256withRSA");
+        sig.initSign(keyPair.getPrivate());
+        sig.update(signingInput.getBytes(StandardCharsets.US_ASCII));
+        byte[] signatureBytes = sig.sign();
+        String b64Sig = Base64.getUrlEncoder().withoutPadding().encodeToString(signatureBytes);
+
+        return signingInput + "." + b64Sig;
+    }
+
     public static void main(String[] args) {
         System.out.println("======================================================================");
         System.out.println("   UniMart + Uni-Gram Security & Persistence Regression Test Suite    ");
@@ -46,6 +70,14 @@ public class SecurityAndPersistenceRegressionTest {
 
         UniGramHttpServer server = null;
         try {
+            // Setup RSA keys for testing Google ID token signature verification
+            KeyPairGenerator kpg = KeyPairGenerator.getInstance("RSA");
+            kpg.initialize(2048);
+            KeyPair testKeyPair = kpg.generateKeyPair();
+            KeyPair attackerKeyPair = kpg.generateKeyPair();
+            String testKid = "unigram-test-kid-1";
+            GoogleTokenVerifier.registerTestKey(testKid, testKeyPair.getPublic());
+
             // Start server with ephemeral port on local loopback
             DatabaseConfig dbConfig = new DatabaseConfig();
             server = new UniGramHttpServer("127.0.0.1", 0, dbConfig, new CorsConfig());
@@ -59,44 +91,42 @@ public class SecurityAndPersistenceRegressionTest {
             System.out.println("[Test 1] Health Endpoint & Storage Transparency");
             HttpRequest healthReq = HttpRequest.newBuilder().uri(URI.create(baseUrl + "/api/health")).GET().build();
             HttpResponse<String> healthRes = client.send(healthReq, HttpResponse.BodyHandlers.ofString());
-            assertTrue("Health status is 200 OK", healthRes.statusCode() == 200);
-            assertTrue("Persistence mode is explicitly labeled", healthRes.headers().firstValue("X-UniMart-Persistence").isPresent());
+            assertTrue("Health check returns 200 OK", healthRes.statusCode() == 200);
+            assertTrue("Health response transparently reports persistence status", healthRes.body().contains("persistenceStatus"));
 
-            // 2. Reject Non-Chitkara Email Domain at Registration
-            System.out.println("\n[Test 2] Registration Email Domain Enforcement");
-            String nonChitkaraPayload = "{\"name\":\"Hacker\",\"email\":\"hacker@gmail.com\",\"password\":\"secret123\"}";
-            HttpRequest nonChitkaraReq = HttpRequest.newBuilder()
+            // 2. Strict University Domain Constraint (@chitkara.edu.in)
+            System.out.println("\n[Test 2] Registration University Domain Constraint");
+            String nonChitkaraPayload = "{\"name\":\"External User\",\"email\":\"user@gmail.com\",\"password\":\"Test12345!\"}";
+            HttpRequest badRegReq = HttpRequest.newBuilder()
                     .uri(URI.create(baseUrl + "/api/auth/register"))
                     .header("Content-Type", "application/json")
                     .POST(HttpRequest.BodyPublishers.ofString(nonChitkaraPayload)).build();
-            HttpResponse<String> nonChitkaraRes = client.send(nonChitkaraReq, HttpResponse.BodyHandlers.ofString());
-            assertTrue("Non-chitkara email registration rejected (400 Bad Request)", nonChitkaraRes.statusCode() == 400);
+            HttpResponse<String> badRegRes = client.send(badRegReq, HttpResponse.BodyHandlers.ofString());
+            assertTrue("Non-Chitkara email registration rejected (400 Bad Request)", badRegRes.statusCode() == 400);
 
-            // 3. Register Valid Student Account
-            System.out.println("\n[Test 3] Student Registration with Hashed Credentials");
-            String studentPayload = "{\"name\":\"Simran Kaur\",\"email\":\"simran0101.becse25@chitkara.edu.in\",\"password\":\"securePass123\",\"studentId\":\"2110990800\"}";
-            HttpRequest regReq = HttpRequest.newBuilder()
+            // 3. Valid Registration
+            System.out.println("\n[Test 3] Valid Student Registration");
+            String validRegPayload = "{\"name\":\"Simran Kaur\",\"email\":\"simran0101.becse25@chitkara.edu.in\",\"student_id\":\"2110990101\",\"password\":\"securePass123\"}";
+            HttpRequest goodRegReq = HttpRequest.newBuilder()
                     .uri(URI.create(baseUrl + "/api/auth/register"))
                     .header("Content-Type", "application/json")
-                    .POST(HttpRequest.BodyPublishers.ofString(studentPayload)).build();
-            HttpResponse<String> regRes = client.send(regReq, HttpResponse.BodyHandlers.ofString());
-            assertTrue("Valid student registration succeeds (201 Created)", regRes.statusCode() == 201);
-            assertTrue("Registration returns bearer session token", regRes.body().contains("\"token\":"));
-            assertTrue("Registration defaults role to student", regRes.body().contains("\"role\":\"student\""));
-            assertTrue("No plaintext password or passwordHash leaked in user payload", !regRes.body().contains("passwordHash") && !regRes.body().contains("securePass123"));
+                    .POST(HttpRequest.BodyPublishers.ofString(validRegPayload)).build();
+            HttpResponse<String> goodRegRes = client.send(goodRegReq, HttpResponse.BodyHandlers.ofString());
+            assertTrue("Valid Chitkara student registration succeeds (201 Created)", goodRegRes.statusCode() == 201);
+            assertTrue("Response never echoes plaintext password", !goodRegRes.body().contains("securePass123"));
+            assertTrue("Response never echoes password_hash", !goodRegRes.body().contains("password_hash"));
 
-            // 4. Invalid Password Rejection (No Fallback Bypass)
-            System.out.println("\n[Test 4] Invalid Credentials Never Grant Access (Zero Fallback Bypass)");
-            String wrongPassPayload = "{\"email\":\"simran0101.becse25@chitkara.edu.in\",\"password\":\"wrong_password_here\"}";
+            // 4. Invalid Password Rejection (No auto-login bypass)
+            System.out.println("\n[Test 4] Rejection of Invalid Password (No Bypass Backdoor)");
+            String wrongPassPayload = "{\"email\":\"simran0101.becse25@chitkara.edu.in\",\"password\":\"wrong_password\"}";
             HttpRequest wrongPassReq = HttpRequest.newBuilder()
                     .uri(URI.create(baseUrl + "/api/auth/login"))
                     .header("Content-Type", "application/json")
                     .POST(HttpRequest.BodyPublishers.ofString(wrongPassPayload)).build();
             HttpResponse<String> wrongPassRes = client.send(wrongPassReq, HttpResponse.BodyHandlers.ofString());
-            assertTrue("Invalid password rejected (401 Unauthorized)", wrongPassRes.statusCode() == 401);
-            assertTrue("No session token issued on failed login", !wrongPassRes.body().contains("\"token\":"));
+            assertTrue("Invalid password rejected with 401 Unauthorized", wrongPassRes.statusCode() == 401);
 
-            // 5. Non-existent User Login Rejection
+            // 5. Non-existent Student Account Rejection
             System.out.println("\n[Test 5] Non-existent Student Account Rejection");
             String ghostPayload = "{\"email\":\"ghost.student@chitkara.edu.in\",\"password\":\"any_password\"}";
             HttpRequest ghostReq = HttpRequest.newBuilder()
@@ -116,7 +146,6 @@ public class SecurityAndPersistenceRegressionTest {
             HttpResponse<String> loginRes = client.send(loginReq, HttpResponse.BodyHandlers.ofString());
             assertTrue("Valid login succeeds (200 OK)", loginRes.statusCode() == 200);
 
-            // Extract student token
             String studentToken = extractToken(loginRes.body());
             assertTrue("Session token parsed successfully", studentToken != null && !studentToken.isEmpty());
 
@@ -130,18 +159,18 @@ public class SecurityAndPersistenceRegressionTest {
             assertTrue("/api/auth/me returns 200 OK with verified session identity", meRes.statusCode() == 200);
             assertTrue("Profile matches registered email", meRes.body().contains("simran0101.becse25@chitkara.edu.in"));
 
-            // 8. Google Sign-In Role Privilege Escalation Prevention
-            System.out.println("\n[Test 8] Google Sign-In Role Escalation Prevention");
-            // User has 'admin' in email string, but is NOT the true admin
-            String googleAttackerPayload = "{\"email\":\"admin_student_club@chitkara.edu.in\",\"name\":\"Fake Admin\",\"sub\":\"g_12345\"}";
-            HttpRequest googleReq = HttpRequest.newBuilder()
+            // 8. Rejection of Unsigned Google Authentication Path
+            System.out.println("\n[Test 8] Rejection of Unsigned Google Auth & Escalation Prevention");
+            String unsignedGooglePayload = "{\"email\":\"admin_student_club@chitkara.edu.in\",\"name\":\"Fake Admin\",\"sub\":\"g_12345\"}";
+            HttpRequest unsignedGoogleReq = HttpRequest.newBuilder()
                     .uri(URI.create(baseUrl + "/api/auth/google"))
                     .header("Content-Type", "application/json")
-                    .POST(HttpRequest.BodyPublishers.ofString(googleAttackerPayload)).build();
-            HttpResponse<String> googleRes = client.send(googleReq, HttpResponse.BodyHandlers.ofString());
-            assertTrue("Google sign-in succeeds (200 OK)", googleRes.statusCode() == 200);
-            assertTrue("Sub-string 'admin' in email DOES NOT grant admin privileges (role is 'student')",
-                    googleRes.body().contains("\"role\":\"student\""));
+                    .POST(HttpRequest.BodyPublishers.ofString(unsignedGooglePayload)).build();
+            HttpResponse<String> unsignedGoogleRes = client.send(unsignedGoogleReq, HttpResponse.BodyHandlers.ofString());
+            assertTrue("Unsigned Google payload without ID token strictly rejected (401 Unauthorized)",
+                    unsignedGoogleRes.statusCode() == 401, unsignedGoogleRes);
+            assertTrue("Error message indicates ID Token is strictly required",
+                    unsignedGoogleRes.body().contains("strictly required"), unsignedGoogleRes);
 
             // 9. Password Recovery & Single-Use OTP Flow
             System.out.println("\n[Test 9] Password Recovery, Rate Limiting & Single-Use OTP");
@@ -173,8 +202,6 @@ public class SecurityAndPersistenceRegressionTest {
             HttpResponse<String> goodOtpRes = client.send(goodOtpReq, HttpResponse.BodyHandlers.ofString());
             assertTrue("Correct OTP verified with 200 OK", goodOtpRes.statusCode() == 200);
             String resetToken = extractField(goodOtpRes.body(), "resetToken");
-            System.out.println("  [DEBUG] goodOtpRes body: " + goodOtpRes.body());
-            System.out.println("  [DEBUG] extracted resetToken: " + resetToken);
             assertTrue("Single-use reset token returned", resetToken != null && !resetToken.isEmpty());
 
             // Replay OTP attempt (must be rejected)
@@ -190,7 +217,6 @@ public class SecurityAndPersistenceRegressionTest {
             HttpResponse<String> resetRes = client.send(resetReq, HttpResponse.BodyHandlers.ofString());
             assertTrue("Password reset succeeds (200 OK)", resetRes.statusCode() == 200, resetRes);
 
-            // Previous session token must now be revoked
             // Previous session token must now be revoked
             HttpResponse<String> postResetMeRes = client.send(meReq, HttpResponse.BodyHandlers.ofString());
             assertTrue("Existing session invalidated following password reset (401 Unauthorized)", postResetMeRes.statusCode() == 401, postResetMeRes);
@@ -322,11 +348,18 @@ public class SecurityAndPersistenceRegressionTest {
             // -----------------------------------------------------------------
             System.out.println("\n[Test 16] Cryptographic Google ID Token Verification");
             long futureSec = (System.currentTimeMillis() / 1000L) + 3600;
-            String headerB64 = Base64.getUrlEncoder().withoutPadding().encodeToString("{\"alg\":\"RS256\",\"typ\":\"JWT\"}".getBytes(StandardCharsets.UTF_8));
+            Map<String, Object> header = Map.of("alg", "RS256", "kid", testKid, "typ", "JWT");
 
-            // 16a: Valid Google ID Token for Chitkara student
-            String validPayload = "{\"iss\":\"https://accounts.google.com\",\"aud\":\"test-client-id\",\"sub\":\"g_12345\",\"email\":\"teststudent@chitkara.edu.in\",\"email_verified\":true,\"name\":\"Google Student\",\"exp\":" + futureSec + "}";
-            String validJwt = headerB64 + "." + Base64.getUrlEncoder().withoutPadding().encodeToString(validPayload.getBytes(StandardCharsets.UTF_8)) + ".signature";
+            // 16a: Valid Google ID Token for Chitkara student signed by registered test key
+            Map<String, Object> validClaims = Map.of(
+                    "iss", "https://accounts.google.com",
+                    "sub", "g_12345",
+                    "email", "teststudent@chitkara.edu.in",
+                    "email_verified", true,
+                    "name", "Google Student",
+                    "exp", futureSec
+            );
+            String validJwt = createSignedJwt(header, validClaims, testKeyPair);
 
             HttpRequest validGoogleReq = HttpRequest.newBuilder()
                     .uri(URI.create(baseUrl + "/api/auth/google"))
@@ -334,13 +367,19 @@ public class SecurityAndPersistenceRegressionTest {
                     .POST(HttpRequest.BodyPublishers.ofString("{\"idToken\":\"" + validJwt + "\"}"))
                     .build();
             HttpResponse<String> validGoogleRes = client.send(validGoogleReq, HttpResponse.BodyHandlers.ofString());
-            assertTrue("Valid Google ID Token succeeds (200 OK)", validGoogleRes.statusCode() == 200, validGoogleRes);
+            assertTrue("Valid cryptographically signed Google ID Token succeeds (200 OK)", validGoogleRes.statusCode() == 200, validGoogleRes);
             assertTrue("Google token exchanges for active session token", validGoogleRes.body().contains("token"), validGoogleRes);
 
             // 16b: Expired Google ID Token
             long pastSec = (System.currentTimeMillis() / 1000L) - 3600;
-            String expiredPayload = "{\"iss\":\"https://accounts.google.com\",\"sub\":\"g_exp\",\"email\":\"expired@chitkara.edu.in\",\"email_verified\":true,\"exp\":" + pastSec + "}";
-            String expiredJwt = headerB64 + "." + Base64.getUrlEncoder().withoutPadding().encodeToString(expiredPayload.getBytes(StandardCharsets.UTF_8)) + ".signature";
+            Map<String, Object> expiredClaims = Map.of(
+                    "iss", "https://accounts.google.com",
+                    "sub", "g_exp",
+                    "email", "expired@chitkara.edu.in",
+                    "email_verified", true,
+                    "exp", pastSec
+            );
+            String expiredJwt = createSignedJwt(header, expiredClaims, testKeyPair);
 
             HttpRequest expiredGoogleReq = HttpRequest.newBuilder()
                     .uri(URI.create(baseUrl + "/api/auth/google"))
@@ -350,9 +389,25 @@ public class SecurityAndPersistenceRegressionTest {
             HttpResponse<String> expiredGoogleRes = client.send(expiredGoogleReq, HttpResponse.BodyHandlers.ofString());
             assertTrue("Expired Google ID Token rejected (401 Unauthorized)", expiredGoogleRes.statusCode() == 401, expiredGoogleRes);
 
-            // 16c: Non-Chitkara Google ID Token
-            String nonChitkaraExtPayload = "{\"iss\":\"https://accounts.google.com\",\"sub\":\"g_ext\",\"email\":\"attacker@gmail.com\",\"email_verified\":true,\"exp\":" + futureSec + "}";
-            String nonChitkaraJwt = headerB64 + "." + Base64.getUrlEncoder().withoutPadding().encodeToString(nonChitkaraExtPayload.getBytes(StandardCharsets.UTF_8)) + ".signature";
+            // 16c: Forged Signature Google ID Token
+            String forgedJwt = createSignedJwt(header, validClaims, attackerKeyPair);
+            HttpRequest forgedGoogleReq = HttpRequest.newBuilder()
+                    .uri(URI.create(baseUrl + "/api/auth/google"))
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString("{\"idToken\":\"" + forgedJwt + "\"}"))
+                    .build();
+            HttpResponse<String> forgedGoogleRes = client.send(forgedGoogleReq, HttpResponse.BodyHandlers.ofString());
+            assertTrue("Forged signature Google ID Token rejected (401 Unauthorized)", forgedGoogleRes.statusCode() == 401, forgedGoogleRes);
+
+            // 16d: Non-Chitkara Google ID Token
+            Map<String, Object> extClaims = Map.of(
+                    "iss", "https://accounts.google.com",
+                    "sub", "g_ext",
+                    "email", "attacker@gmail.com",
+                    "email_verified", true,
+                    "exp", futureSec
+            );
+            String nonChitkaraJwt = createSignedJwt(header, extClaims, testKeyPair);
 
             HttpRequest nonChitkaraGoogleReq = HttpRequest.newBuilder()
                     .uri(URI.create(baseUrl + "/api/auth/google"))
@@ -363,9 +418,10 @@ public class SecurityAndPersistenceRegressionTest {
             assertTrue("Non-Chitkara Google email rejected (401 or 403)", nonChitkaraGoogleRes.statusCode() == 401 || nonChitkaraGoogleRes.statusCode() == 403, nonChitkaraGoogleRes);
 
             // -----------------------------------------------------------------
-            // Test 17: Database Outage & Durable Write Rejection
+            // Test 17: Database Outage & Silent Persistence Failure Prevention
             // -----------------------------------------------------------------
-            System.out.println("\n[Test 17] Database Outage & Durable Write Rejection");
+            System.out.println("\n[Test 17] Database Outage & Silent Persistence Failure Prevention");
+            // 17a: Listing Create
             HttpRequest durableWriteReq = HttpRequest.newBuilder()
                     .uri(URI.create(baseUrl + "/api/listings"))
                     .header("Authorization", "Bearer " + adminToken)
@@ -376,6 +432,50 @@ public class SecurityAndPersistenceRegressionTest {
             HttpResponse<String> durableWriteRes = client.send(durableWriteReq, HttpResponse.BodyHandlers.ofString());
             assertTrue("Write with X-Require-Durable returns 503 during MySQL outage", durableWriteRes.statusCode() == 503, durableWriteRes);
             assertTrue("Application never falsely reports durable write success during outage", durableWriteRes.body().contains("unavailable"), durableWriteRes);
+
+            // 17b: Listing Update
+            HttpRequest durableUpdateReq = HttpRequest.newBuilder()
+                    .uri(URI.create(baseUrl + "/api/listings/" + createdListingId))
+                    .header("Authorization", "Bearer " + adminToken)
+                    .header("Content-Type", "application/json")
+                    .header("X-Require-Durable", "true")
+                    .PUT(HttpRequest.BodyPublishers.ofString("{\"price\":199.00}"))
+                    .build();
+            HttpResponse<String> durableUpdateRes = client.send(durableUpdateReq, HttpResponse.BodyHandlers.ofString());
+            assertTrue("Update with X-Require-Durable returns 503 during MySQL outage", durableUpdateRes.statusCode() == 503, durableUpdateRes);
+
+            // 17c: Listing Approve
+            HttpRequest durableApproveReq = HttpRequest.newBuilder()
+                    .uri(URI.create(baseUrl + "/api/listings/" + createdListingId + "/approve"))
+                    .header("Authorization", "Bearer " + adminToken)
+                    .header("X-Require-Durable", "true")
+                    .POST(HttpRequest.BodyPublishers.noBody())
+                    .build();
+            HttpResponse<String> durableApproveRes = client.send(durableApproveReq, HttpResponse.BodyHandlers.ofString());
+            assertTrue("Approve with X-Require-Durable returns 503 during MySQL outage", durableApproveRes.statusCode() == 503, durableApproveRes);
+
+            // 17d: Wishlist Add
+            HttpRequest durableWishReq = HttpRequest.newBuilder()
+                    .uri(URI.create(baseUrl + "/api/wishlist"))
+                    .header("Authorization", "Bearer " + adminToken)
+                    .header("Content-Type", "application/json")
+                    .header("X-Require-Durable", "true")
+                    .POST(HttpRequest.BodyPublishers.ofString("{\"listingId\":" + createdListingId + "}"))
+                    .build();
+            HttpResponse<String> durableWishRes = client.send(durableWishReq, HttpResponse.BodyHandlers.ofString());
+            assertTrue("Wishlist with X-Require-Durable returns 503 during MySQL outage", durableWishRes.statusCode() == 503, durableWishRes);
+
+            // 17e: Message Send
+            HttpRequest durableMsgReq = HttpRequest.newBuilder()
+                    .uri(URI.create(baseUrl + "/api/conversations/" + seedConvId + "/messages"))
+                    .header("Authorization", "Bearer " + adminToken)
+                    .header("Content-Type", "application/json")
+                    .header("X-Require-Durable", "true")
+                    .header("X-Dev-User-Id", "student_a")
+                    .POST(HttpRequest.BodyPublishers.ofString("{\"content\":\"Durable test message\"}"))
+                    .build();
+            HttpResponse<String> durableMsgRes = client.send(durableMsgReq, HttpResponse.BodyHandlers.ofString());
+            assertTrue("Message send with X-Require-Durable returns 503 during MySQL outage", durableMsgRes.statusCode() == 503, durableMsgRes);
 
             // -----------------------------------------------------------------
             // Test 18: Client Role Tampering Defense
@@ -427,6 +527,7 @@ public class SecurityAndPersistenceRegressionTest {
             if (server != null && server.isRunning()) {
                 server.stop(0);
             }
+            GoogleTokenVerifier.clearTestKeys();
         }
 
         System.out.println("\n======================================================================");

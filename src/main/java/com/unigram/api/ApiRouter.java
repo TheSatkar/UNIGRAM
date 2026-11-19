@@ -120,6 +120,10 @@ public class ApiRouter implements HttpHandler {
     }
 
     private void seedInitialAccountsAndCatalog() {
+        if (isProductionMode()) {
+            System.out.println("[UniMart API] Production mode: demo accounts and seed catalog disabled.");
+            return;
+        }
         try {
             // Seed Admin
             User admin = new User("admin_1", "Campus Admin", "admin@chitkara.edu.in", "admin", "ADMIN-001",
@@ -437,36 +441,23 @@ public class ApiRouter implements HttpHandler {
             return;
         }
 
-        String email;
-        String name;
-        String sub;
-
-        // Cryptographic verification if ID token (JWT) is provided
-        if (req.getIdToken() != null && !req.getIdToken().trim().isEmpty()) {
-            String expectedAudience = System.getenv("GOOGLE_CLIENT_ID");
-            GoogleTokenVerifier.VerificationResult vResult = GoogleTokenVerifier.verify(req.getIdToken(), expectedAudience);
-            if (!vResult.isValid()) {
-                sendJson(exchange, 401, ApiResponse.error("Google token verification failed: " + vResult.getError()));
-                return;
-            }
-            GoogleTokenVerifier.GoogleClaims claims = vResult.getClaims();
-            email = claims.email.trim().toLowerCase();
-            name = claims.name != null ? claims.name : email.split("@")[0];
-            sub = claims.sub;
-        } else {
-            // In production mode, Google ID token (JWT) is strictly required
-            if (isProductionMode()) {
-                sendJson(exchange, 401, ApiResponse.error("Google ID Token (JWT) is strictly required for production authentication."));
-                return;
-            }
-            if (req.getEmail() == null || req.getEmail().trim().isEmpty()) {
-                sendJson(exchange, 400, ApiResponse.error("Missing Google email profile."));
-                return;
-            }
-            email = req.getEmail().trim().toLowerCase();
-            name = req.getName() != null && !req.getName().trim().isEmpty() ? req.getName().trim() : email.split("@")[0];
-            sub = req.getSub();
+        // Production security: Google ID token (JWT) is strictly required. Unsigned client profiles are rejected.
+        if (req.getIdToken() == null || req.getIdToken().trim().isEmpty()) {
+            sendJson(exchange, 401, ApiResponse.error("Google ID Token (JWT) is strictly required for authentication. Unsigned profile payloads are rejected."));
+            return;
         }
+
+        String expectedAudience = System.getenv("GOOGLE_CLIENT_ID");
+        GoogleTokenVerifier.VerificationResult vResult = GoogleTokenVerifier.verify(req.getIdToken(), expectedAudience, isProductionMode());
+        if (!vResult.isValid()) {
+            sendJson(exchange, 401, ApiResponse.error("Google token verification failed: " + vResult.getError()));
+            return;
+        }
+
+        GoogleTokenVerifier.GoogleClaims claims = vResult.getClaims();
+        String email = claims.email.trim().toLowerCase();
+        String name = claims.name != null && !claims.name.trim().isEmpty() ? claims.name.trim() : email.split("@")[0];
+        String sub = claims.sub;
 
         if (!email.endsWith("@chitkara.edu.in")) {
             sendJson(exchange, 403, ApiResponse.error("Access restricted: Only official Chitkara University accounts (@chitkara.edu.in) may sign in."));
@@ -477,16 +468,43 @@ public class ApiRouter implements HttpHandler {
         User user = findUserByEmail(email);
         if (user == null) {
             String userId = "google_" + (sub != null ? sub : System.currentTimeMillis());
-            // Security: Never grant admin based on substring 'admin'!
-            // Admin role is granted ONLY if email exactly matches trusted server config
-            String role = "admin@chitkara.edu.in".equalsIgnoreCase(email) ? "admin" : "student";
+            // Security: Role assignment must come strictly from existing database/user records
+            // or explicitly configured admin accounts via UNIGRAM_ADMIN_EMAILS (never from email substring or hardcoded name).
+            String role = "student";
+            String adminEmails = System.getenv("UNIGRAM_ADMIN_EMAILS");
+            if (adminEmails != null && !adminEmails.trim().isEmpty()) {
+                for (String adminEmail : adminEmails.split(",")) {
+                    if (adminEmail.trim().equalsIgnoreCase(email)) {
+                        role = "admin";
+                        break;
+                    }
+                }
+            }
             user = new User(userId, name, email, role, email.split("@")[0].toUpperCase(), "");
 
             inMemoryChatService.registerUser(user);
             if (isDatabaseAvailable()) {
                 try (Connection conn = DatabaseConnectionFactory.getConnection(config)) {
-                    userDao.insert(conn, user);
-                } catch (Exception ignored) {}
+                    conn.setAutoCommit(false);
+                    try {
+                        userDao.insert(conn, user);
+                        conn.commit();
+                    } catch (Exception e) {
+                        conn.rollback();
+                        if (isProductionMode() || isDurableWriteRequired(exchange)) {
+                            sendJson(exchange, 500, ApiResponse.error("Database failure registering Google user: " + e.getMessage()));
+                            return;
+                        }
+                    }
+                } catch (SQLException | DatabaseException e) {
+                    if (isProductionMode() || isDurableWriteRequired(exchange)) {
+                        sendJson(exchange, 500, ApiResponse.error("Database connection failure: " + e.getMessage()));
+                        return;
+                    }
+                }
+            } else if (isProductionMode() || isDurableWriteRequired(exchange)) {
+                sendJson(exchange, 503, ApiResponse.error("Durable database write failed: MySQL database is unavailable."));
+                return;
             }
         }
 
@@ -824,36 +842,76 @@ public class ApiRouter implements HttpHandler {
         String body = JsonUtil.readRequestBody(exchange, JsonUtil.DEFAULT_MAX_BODY_BYTES);
         CreateListingRequest req = JsonUtil.fromJson(body, CreateListingRequest.class);
 
-        // Price-only updates go live immediately without moderation
-        boolean onlyPriceChanged = req.getTitle() == null || req.getTitle().equals(listing.getTitle());
+        // Check if non-price fields were modified
+        boolean isNonPriceModified = false;
+        if (req.getTitle() != null && !req.getTitle().trim().equalsIgnoreCase(listing.getTitle())) isNonPriceModified = true;
+        if (req.getCategoryId() != null && !req.getCategoryId().equalsIgnoreCase(listing.getCategoryId())) isNonPriceModified = true;
+        if (req.getSubcategoryId() != null && !req.getSubcategoryId().equalsIgnoreCase(listing.getSubcategoryId())) isNonPriceModified = true;
+        if (req.getItemCondition() != null && !req.getItemCondition().equalsIgnoreCase(listing.getItemCondition())) isNonPriceModified = true;
+        if (req.getMeetupSpot() != null && !req.getMeetupSpot().equalsIgnoreCase(listing.getMeetupSpot())) isNonPriceModified = true;
+        if (req.getDescription() != null && !req.getDescription().trim().equals(listing.getDescription())) isNonPriceModified = true;
+        if (req.getPhotos() != null && !req.getPhotos().equals(listing.getPhotos())) isNonPriceModified = true;
+
         if (req.getPrice() != null) {
             listing.setPrice(req.getPrice());
         }
 
-        if (isAdmin || onlyPriceChanged) {
-            listing.setUpdatedAt(LocalDateTime.now());
-            inMemoryStorage.saveListing(listing);
-            if (isDatabaseAvailable()) {
-                try (Connection conn = DatabaseConnectionFactory.getConnection(config)) {
-                    listingDao.update(conn, listing);
-                } catch (Exception ignored) {}
-            }
-            sendJson(exchange, 200, ApiResponse.ok(listing));
+        boolean requiresModeration = !isAdmin && isNonPriceModified;
+
+        if (!requiresModeration) {
+            if (req.getTitle() != null) listing.setTitle(req.getTitle().trim());
+            if (req.getCategoryId() != null) listing.setCategoryId(req.getCategoryId());
+            if (req.getSubcategoryId() != null) listing.setSubcategoryId(req.getSubcategoryId());
+            if (req.getOriginalPrice() != null) listing.setOriginalPrice(req.getOriginalPrice());
+            if (req.getItemCondition() != null) listing.setItemCondition(req.getItemCondition());
+            if (req.getMeetupSpot() != null) listing.setMeetupSpot(req.getMeetupSpot());
+            if (req.getDescription() != null) listing.setDescription(req.getDescription().trim());
+            if (req.getPhotos() != null) listing.setPhotos(req.getPhotos());
         } else {
-            // Non-price edits move to pending status and store snapshot
             listing.setStatus("pending");
             listing.setPendingType("edit");
+        }
+        listing.setUpdatedAt(LocalDateTime.now());
+
+        if (isDatabaseAvailable()) {
+            try (Connection conn = DatabaseConnectionFactory.getConnection(config)) {
+                conn.setAutoCommit(false);
+                try {
+                    if (requiresModeration) {
+                        listingDao.updateStatus(conn, id, "pending", "edit");
+                        listingDao.savePendingEdit(conn, id, body);
+                    } else {
+                        listingDao.update(conn, listing);
+                        if (req.getPhotos() != null) {
+                            listingDao.deletePhotosByListingId(conn, id);
+                            for (int i = 0; i < req.getPhotos().size(); i++) {
+                                listingDao.insertPhoto(conn, id, req.getPhotos().get(i), i);
+                            }
+                        }
+                    }
+                    conn.commit();
+                } catch (Exception e) {
+                    conn.rollback();
+                    sendJson(exchange, 500, ApiResponse.error("Database error updating listing: " + e.getMessage()));
+                    return;
+                }
+            } catch (SQLException | DatabaseException e) {
+                sendJson(exchange, 500, ApiResponse.error("Database connection failure: " + e.getMessage()));
+                return;
+            }
+        } else if (isProductionMode() || isDurableWriteRequired(exchange)) {
+            sendJson(exchange, 503, ApiResponse.error("Durable database write failed: MySQL database is unavailable. Writes are rejected to maintain strict persistence integrity."));
+            return;
+        }
+
+        // Only update in-memory state after committed database transaction (or in isolated demo mode)
+        if (requiresModeration) {
             inMemoryStorage.saveListing(listing);
             inMemoryStorage.savePendingEdit(id, body);
-
-            if (isDatabaseAvailable()) {
-                try (Connection conn = DatabaseConnectionFactory.getConnection(config)) {
-                    listingDao.updateStatus(conn, id, "pending", "edit");
-                    listingDao.savePendingEdit(conn, id, body);
-                } catch (Exception ignored) {}
-            }
-            sendJson(exchange, 200, ApiResponse.ok(listing));
+        } else {
+            inMemoryStorage.saveListing(listing);
         }
+        sendJson(exchange, 200, ApiResponse.ok(listing));
     }
 
     private void handleListingApprove(HttpExchange exchange, long id) throws IOException {
@@ -874,18 +932,58 @@ public class ApiRouter implements HttpHandler {
             return;
         }
 
+        if (isDatabaseAvailable()) {
+            try (Connection conn = DatabaseConnectionFactory.getConnection(config)) {
+                conn.setAutoCommit(false);
+                try {
+                    Optional<String> pendingEditOpt = listingDao.findPendingEdit(conn, id);
+                    if (pendingEditOpt.isPresent()) {
+                        CreateListingRequest proposed = JsonUtil.fromJson(pendingEditOpt.get(), CreateListingRequest.class);
+                        if (proposed != null) {
+                            if (proposed.getTitle() != null) listing.setTitle(proposed.getTitle().trim());
+                            if (proposed.getCategoryId() != null) listing.setCategoryId(proposed.getCategoryId());
+                            if (proposed.getSubcategoryId() != null) listing.setSubcategoryId(proposed.getSubcategoryId());
+                            if (proposed.getPrice() != null) listing.setPrice(proposed.getPrice());
+                            if (proposed.getOriginalPrice() != null) listing.setOriginalPrice(proposed.getOriginalPrice());
+                            if (proposed.getItemCondition() != null) listing.setItemCondition(proposed.getItemCondition());
+                            if (proposed.getMeetupSpot() != null) listing.setMeetupSpot(proposed.getMeetupSpot());
+                            if (proposed.getDescription() != null) listing.setDescription(proposed.getDescription().trim());
+                            listing.setHasNotes(proposed.isHasNotes());
+                            if (proposed.getPhotos() != null) {
+                                listingDao.deletePhotosByListingId(conn, id);
+                                for (int i = 0; i < proposed.getPhotos().size(); i++) {
+                                    listingDao.insertPhoto(conn, id, proposed.getPhotos().get(i), i);
+                                }
+                                listing.setPhotos(proposed.getPhotos());
+                            }
+                            listingDao.update(conn, listing);
+                        }
+                        listingDao.deletePendingEdit(conn, id);
+                    }
+                    listing.setStatus("approved");
+                    listing.setPendingType(null);
+                    listing.setUpdatedAt(LocalDateTime.now());
+                    listingDao.updateStatus(conn, id, "approved", null);
+                    conn.commit();
+                } catch (Exception e) {
+                    conn.rollback();
+                    sendJson(exchange, 500, ApiResponse.error("Database error approving listing: " + e.getMessage()));
+                    return;
+                }
+            } catch (SQLException | DatabaseException e) {
+                sendJson(exchange, 500, ApiResponse.error("Database connection failure: " + e.getMessage()));
+                return;
+            }
+        } else if (isProductionMode() || isDurableWriteRequired(exchange)) {
+            sendJson(exchange, 503, ApiResponse.error("Durable database write failed: MySQL database is unavailable."));
+            return;
+        }
+
         listing.setStatus("approved");
         listing.setPendingType(null);
         listing.setUpdatedAt(LocalDateTime.now());
         inMemoryStorage.saveListing(listing);
         inMemoryStorage.deletePendingEdit(id);
-
-        if (isDatabaseAvailable()) {
-            try (Connection conn = DatabaseConnectionFactory.getConnection(config)) {
-                listingDao.updateStatus(conn, id, "approved", null);
-                listingDao.deletePendingEdit(conn, id);
-            } catch (Exception ignored) {}
-        }
 
         sendJson(exchange, 200, ApiResponse.ok(listing));
     }
@@ -908,17 +1006,43 @@ public class ApiRouter implements HttpHandler {
             return;
         }
 
-        listing.setStatus("rejected");
-        listing.setPendingType(null);
-        listing.setUpdatedAt(LocalDateTime.now());
-        inMemoryStorage.saveListing(listing);
-        inMemoryStorage.deletePendingEdit(id);
-
         if (isDatabaseAvailable()) {
             try (Connection conn = DatabaseConnectionFactory.getConnection(config)) {
-                listingDao.updateStatus(conn, id, "rejected", null);
-                listingDao.deletePendingEdit(conn, id);
-            } catch (Exception ignored) {}
+                conn.setAutoCommit(false);
+                try {
+                    Optional<String> pendingEditOpt = listingDao.findPendingEdit(conn, id);
+                    if (pendingEditOpt.isPresent()) {
+                        // Rejecting an edit on an approved listing: delete pending edit only, live listing remains untouched
+                        listingDao.deletePendingEdit(conn, id);
+                    } else {
+                        // Rejecting a new listing: mark rejected
+                        listing.setStatus("rejected");
+                        listing.setPendingType(null);
+                        listing.setUpdatedAt(LocalDateTime.now());
+                        listingDao.updateStatus(conn, id, "rejected", null);
+                    }
+                    conn.commit();
+                } catch (Exception e) {
+                    conn.rollback();
+                    sendJson(exchange, 500, ApiResponse.error("Database error rejecting listing: " + e.getMessage()));
+                    return;
+                }
+            } catch (SQLException | DatabaseException e) {
+                sendJson(exchange, 500, ApiResponse.error("Database connection failure: " + e.getMessage()));
+                return;
+            }
+        } else if (isProductionMode() || isDurableWriteRequired(exchange)) {
+            sendJson(exchange, 503, ApiResponse.error("Durable database write failed: MySQL database is unavailable."));
+            return;
+        }
+
+        if (inMemoryStorage.getPendingEdit(id) != null) {
+            inMemoryStorage.deletePendingEdit(id);
+        } else {
+            listing.setStatus("rejected");
+            listing.setPendingType(null);
+            listing.setUpdatedAt(LocalDateTime.now());
+            inMemoryStorage.saveListing(listing);
         }
 
         sendJson(exchange, 200, ApiResponse.ok(listing));
@@ -949,14 +1073,28 @@ public class ApiRouter implements HttpHandler {
 
         listing.setStatus("sold");
         listing.setUpdatedAt(LocalDateTime.now());
-        inMemoryStorage.saveListing(listing);
 
         if (isDatabaseAvailable()) {
             try (Connection conn = DatabaseConnectionFactory.getConnection(config)) {
-                listingDao.updateStatus(conn, id, "sold", null);
-            } catch (Exception ignored) {}
+                conn.setAutoCommit(false);
+                try {
+                    listingDao.updateStatus(conn, id, "sold", null);
+                    conn.commit();
+                } catch (Exception e) {
+                    conn.rollback();
+                    sendJson(exchange, 500, ApiResponse.error("Database error marking listing sold: " + e.getMessage()));
+                    return;
+                }
+            } catch (SQLException | DatabaseException e) {
+                sendJson(exchange, 500, ApiResponse.error("Database connection failure: " + e.getMessage()));
+                return;
+            }
+        } else if (isProductionMode() || isDurableWriteRequired(exchange)) {
+            sendJson(exchange, 503, ApiResponse.error("Durable database write failed: MySQL database is unavailable."));
+            return;
         }
 
+        inMemoryStorage.saveListing(listing);
         sendJson(exchange, 200, ApiResponse.ok(listing));
     }
 
@@ -983,13 +1121,29 @@ public class ApiRouter implements HttpHandler {
             return;
         }
 
-        inMemoryStorage.deleteListing(id);
         if (isDatabaseAvailable()) {
             try (Connection conn = DatabaseConnectionFactory.getConnection(config)) {
-                listingDao.delete(conn, id);
-            } catch (Exception ignored) {}
+                conn.setAutoCommit(false);
+                try {
+                    listingDao.deletePhotosByListingId(conn, id);
+                    listingDao.deletePendingEdit(conn, id);
+                    listingDao.delete(conn, id);
+                    conn.commit();
+                } catch (Exception e) {
+                    conn.rollback();
+                    sendJson(exchange, 500, ApiResponse.error("Database error deleting listing: " + e.getMessage()));
+                    return;
+                }
+            } catch (SQLException | DatabaseException e) {
+                sendJson(exchange, 500, ApiResponse.error("Database connection failure: " + e.getMessage()));
+                return;
+            }
+        } else if (isProductionMode() || isDurableWriteRequired(exchange)) {
+            sendJson(exchange, 503, ApiResponse.error("Durable database write failed: MySQL database is unavailable."));
+            return;
         }
 
+        inMemoryStorage.deleteListing(id);
         sendJson(exchange, 200, ApiResponse.ok(Map.of("message", "Listing deleted successfully", "id", id)));
     }
 
@@ -1027,12 +1181,28 @@ public class ApiRouter implements HttpHandler {
                     return;
                 }
                 long lid = req.getListingId();
-                inMemoryStorage.addToWishlist(userId, lid);
+
                 if (isDatabaseAvailable()) {
                     try (Connection conn = DatabaseConnectionFactory.getConnection(config)) {
-                        wishlistDao.add(conn, userId, lid);
-                    } catch (Exception ignored) {}
+                        conn.setAutoCommit(false);
+                        try {
+                            wishlistDao.add(conn, userId, lid);
+                            conn.commit();
+                        } catch (Exception e) {
+                            conn.rollback();
+                            sendJson(exchange, 500, ApiResponse.error("Database error adding to wishlist: " + e.getMessage()));
+                            return;
+                        }
+                    } catch (SQLException | DatabaseException e) {
+                        sendJson(exchange, 500, ApiResponse.error("Database connection failure: " + e.getMessage()));
+                        return;
+                    }
+                } else if (isProductionMode() || isDurableWriteRequired(exchange)) {
+                    sendJson(exchange, 503, ApiResponse.error("Durable database write failed: MySQL database is unavailable."));
+                    return;
                 }
+
+                inMemoryStorage.addToWishlist(userId, lid);
                 sendJson(exchange, 200, ApiResponse.ok(Map.of("success", true, "listingId", lid)));
             } else {
                 sendMethodNotAllowed(exchange, "GET, POST, OPTIONS");
@@ -1044,12 +1214,29 @@ public class ApiRouter implements HttpHandler {
             }
             String lidStr = path.substring("/api/wishlist/".length());
             long lid = parseLongSafe(lidStr);
-            inMemoryStorage.removeFromWishlist(userId, lid);
+
             if (isDatabaseAvailable()) {
                 try (Connection conn = DatabaseConnectionFactory.getConnection(config)) {
-                    wishlistDao.remove(conn, userId, lid);
-                } catch (Exception ignored) {}
+                    conn.setAutoCommit(false);
+                    try {
+                        wishlistDao.remove(conn, userId, lid);
+                        conn.commit();
+                    } catch (Exception e) {
+                        conn.rollback();
+                        sendJson(exchange, 500, ApiResponse.error("Database error removing from wishlist: " + e.getMessage()));
+                        return;
+                    }
+                } catch (SQLException | DatabaseException e) {
+                    sendJson(exchange, 500, ApiResponse.error("Database connection failure: " + e.getMessage()));
+                    return;
+                }
+            } else if (isProductionMode() || isDurableWriteRequired(exchange)) {
+                sendJson(exchange, 503, ApiResponse.error("Durable database write failed: MySQL database is unavailable."));
+                return;
             }
+
+            inMemoryStorage.removeFromWishlist(userId, lid);
+            sendJson(exchange, 200, ApiResponse.ok(Map.of("success", true, "listingId", lid)));
             sendJson(exchange, 200, ApiResponse.ok(Map.of("success", true, "listingId", lid)));
         } else {
             sendMethodNotAllowed(exchange, "GET, POST, DELETE, OPTIONS");
@@ -1503,9 +1690,12 @@ public class ApiRouter implements HttpHandler {
                     sendJson(exchange, 500, ApiResponse.error("Database failure while sending message: " + e.getMessage()));
                     return;
                 }
+            } else if (isProductionMode() || isDurableWriteRequired(exchange)) {
+                sendJson(exchange, 503, ApiResponse.error("Durable database write failed: MySQL database is unavailable. Message was rejected to protect persistence integrity."));
+                return;
             }
 
-            // In-memory persistence
+            // In-memory persistence (isolated demo mode only)
             try {
                 Message message = inMemoryMessageService.sendMessage(conversationId, senderId, content);
                 sendJson(exchange, 201, ApiResponse.created(message));

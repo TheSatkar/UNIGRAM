@@ -124,8 +124,8 @@ export const authApi = {
     const matchedUser = users.find((u) => {
       const uEmail = (u.email || '').toLowerCase().trim();
       if (uEmail !== normalizedEmail) return false;
-      // Match against SHA-256 hash or legacy demo hash
-      return u.password_hash === passwordHash || u.password_hash === password;
+      // Match against cryptographic SHA-256 hash
+      return u.password_hash === passwordHash;
     });
 
     if (!matchedUser) {
@@ -217,23 +217,30 @@ export const authApi = {
 
   /**
    * Google Sign-In Authentication
+   * Forwards cryptographically verifiable Google ID Token (JWT) to backend
    */
   async loginWithGoogle(profile) {
-    const normEmail = (profile.email || '').toLowerCase().trim();
-    if (!normEmail.endsWith('@chitkara.edu.in')) {
+    const rawToken = profile?.idToken || profile?.credential || (typeof profile === 'string' ? profile : null);
+    if (!rawToken && IS_PROD_AUTH) {
+      throw new Error('Google ID Token (JWT) is required for production authentication.');
+    }
+
+    const normEmail = (profile?.email || '').toLowerCase().trim();
+    if (normEmail && !normEmail.endsWith('@chitkara.edu.in')) {
       throw new Error('Access restricted: Only official Chitkara University accounts (@chitkara.edu.in) may sign in.');
     }
 
-    // 1. Try Backend Google Authentication
+    // 1. Try Backend Google Authentication with real ID Token
     try {
       const res = await fetch(`${API_BASE_URL}/api/auth/google`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
         body: JSON.stringify({
-          email: normEmail,
-          name: profile.name,
-          picture: profile.picture,
-          sub: profile.sub
+          idToken: rawToken,
+          email: normEmail || undefined,
+          name: profile?.name,
+          picture: profile?.picture,
+          sub: profile?.sub
         })
       });
 
@@ -245,26 +252,31 @@ export const authApi = {
         if (token) this.setToken(token);
         this.setCurrentUser(user);
         return { data: user, token, isDemoMode: false };
+      } else {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.error || 'Google authentication failed on server.');
       }
-    } catch (_netErr) {}
+    } catch (apiErr) {
+      if (IS_PROD_AUTH || (apiErr.message && !apiErr.message.includes('fetch'))) {
+        throw apiErr;
+      }
+    }
 
     if (IS_PROD_AUTH) {
       throw new Error('Google OAuth backend unreachable. Local demo login is disabled in production mode.');
     }
 
-    // 2. Demo fallback: Map roles strictly without substring escalation
+    // 2. Demo fallback strictly in offline demo mode: role is never escalated
     const users = getTable('users') || [];
     let user = users.find((u) => u.email.toLowerCase() === normEmail);
     if (!user) {
-      // Role is admin ONLY if email is exactly admin@chitkara.edu.in
-      const role = normEmail === 'admin@chitkara.edu.in' ? 'admin' : 'student';
       user = {
-        id: `google_${profile.sub || Date.now()}`,
-        name: profile.name || normEmail.split('@')[0],
+        id: `google_${profile?.sub || Date.now()}`,
+        name: profile?.name || normEmail.split('@')[0],
         email: normEmail,
         student_id: normEmail.split('@')[0].toUpperCase(),
-        role,
-        avatar: profile.picture,
+        role: 'student',
+        avatar: profile?.picture,
         created_at: new Date().toISOString()
       };
       users.push(user);
@@ -278,7 +290,8 @@ export const authApi = {
   },
 
   /**
-   * Retrieve currently authenticated session user
+   * Retrieve currently authenticated session user.
+   * In production mode, never trusts unverified browser-local storage.
    */
   async getCurrentUser() {
     const token = this.getToken();
@@ -295,15 +308,27 @@ export const authApi = {
           const user = json.data;
           this.setCurrentUser(user);
           return { data: user, isDemoMode: false };
-        } else if (res.status === 401) {
+        } else if (res.status === 401 || res.status === 403 || res.status === 404) {
           this.setCurrentUser(null);
           return { data: null };
         }
-      } catch (_netErr) {}
+      } catch (_netErr) {
+        if (IS_PROD_AUTH) {
+          // Reject fallback in production mode
+          return { data: null };
+        }
+      }
+    } else if (IS_PROD_AUTH) {
+      // In production mode, unverified browser storage is NEVER trusted as authenticated user proof
+      return { data: null };
     }
 
-    // Local storage fallback
-    return { data: this.getCurrentUserFromStorage() };
+    // Local storage fallback strictly for isolated local demo mode
+    const localUser = this.getCurrentUserFromStorage();
+    if (localUser && localUser.isDemoMode) {
+      return { data: localUser, isDemoMode: true };
+    }
+    return { data: null };
   },
 
   /**

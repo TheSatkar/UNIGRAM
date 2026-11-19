@@ -46,13 +46,15 @@ public class ListingJdbcDao {
     }
 
     public Optional<Listing> findById(Connection conn, long id) throws SQLException {
-        String sql = "SELECT * FROM listings WHERE id = ?";
+        String sql = "SELECT l.*, u.full_name AS seller_name FROM listings l " +
+                "LEFT JOIN users u ON l.seller_id = u.user_id WHERE l.id = ?";
         try (PreparedStatement stmt = conn.prepareStatement(sql)) {
             stmt.setLong(1, id);
             try (ResultSet rs = stmt.executeQuery()) {
                 if (rs.next()) {
                     Listing listing = mapRowToListing(rs);
                     listing.setPhotos(findPhotosByListingId(conn, id));
+                    listing.setPendingEdit(findPendingEdit(conn, id).orElse(null));
                     return Optional.of(listing);
                 }
             }
@@ -61,13 +63,19 @@ public class ListingJdbcDao {
     }
 
     public List<Listing> findAll(Connection conn) throws SQLException {
-        String sql = "SELECT * FROM listings ORDER BY created_at DESC";
+        String sql = "SELECT l.*, u.full_name AS seller_name, pe.proposed_changes AS pending_edit FROM listings l " +
+                "LEFT JOIN users u ON l.seller_id = u.user_id " +
+                "LEFT JOIN listing_pending_edits pe ON l.id = pe.listing_id " +
+                "ORDER BY l.created_at DESC";
         List<Listing> list = new ArrayList<>();
         try (PreparedStatement stmt = conn.prepareStatement(sql);
              ResultSet rs = stmt.executeQuery()) {
             while (rs.next()) {
                 Listing l = mapRowToListing(rs);
                 l.setPhotos(findPhotosByListingId(conn, l.getId()));
+                try {
+                    l.setPendingEdit(rs.getString("pending_edit"));
+                } catch (Exception ignored) {}
                 list.add(l);
             }
         }
@@ -199,6 +207,10 @@ public class ListingJdbcDao {
 
         Timestamp updatedTs = rs.getTimestamp("updated_at");
         if (updatedTs != null) l.setUpdatedAt(updatedTs.toLocalDateTime());
+
+        try {
+            l.setSellerName(rs.getString("seller_name"));
+        } catch (Exception ignored) {}
 
         return l;
     }

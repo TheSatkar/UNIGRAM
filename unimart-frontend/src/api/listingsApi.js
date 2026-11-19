@@ -1,20 +1,135 @@
 // src/api/listingsApi.js
 /**
- * UNIMART Listings API (Fake REST API layer)
+ * UNIMART Production Listings API
  * 
- * Interacts with listings, listing_photos, and listing_pending_edits tables.
+ * Directly integrates with the authoritative Uni-Gram Java HTTP backend (com.unigram.api)
+ * backed by persistent MySQL tables (listings, listing_photos, listing_pending_edits).
+ *
  * Enforces college business rules:
  * - New listings start as 'pending' for admin verification.
  * - Price-only edits go live immediately.
  * - Non-price edits move to 'pending' state and store proposed changes in listing_pending_edits.
  * - Rejecting an edit reverts to the previously approved version.
  * - Pending/rejected listings are visible only to the listing owner and admins.
+ * - Server authorizes all operations via Bearer session tokens.
+ * - Local mock storage is isolated and enabled only in demo fallback mode.
  */
 
 import { getTable, setTable, delay } from './db.js';
 import { categories } from '../lib/categories.js';
+import { authApi } from './authApi.js';
 
-function populateListing(item, photosTable, usersTable, pendingEditsTable) {
+const API_BASE_URL = (import.meta.env.VITE_UNIGRAM_API_BASE_URL || 'http://127.0.0.1:8080').replace(/\/+$/, '');
+const IS_PROD_MODE = Boolean(
+  import.meta.env.PROD ||
+  import.meta.env.VITE_APP_MODE === 'production' ||
+  import.meta.env.VITE_ENFORCE_PROD_AUTH === 'true'
+);
+
+async function requestBackend(endpoint, options = {}) {
+  const url = `${API_BASE_URL}${endpoint}`;
+  const headers = {
+    'Accept': 'application/json',
+    ...(options.headers || {})
+  };
+
+  const token = authApi.getToken();
+  if (token && !headers['Authorization']) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
+  if (IS_PROD_MODE && !headers['X-Require-Durable']) {
+    headers['X-Require-Durable'] = 'true';
+  }
+
+  if (options.body && typeof options.body === 'object') {
+    headers['Content-Type'] = 'application/json';
+    options.body = JSON.stringify(options.body);
+  }
+
+  const res = await fetch(url, { ...options, headers });
+  let json = null;
+  const contentType = res.headers.get('content-type') || '';
+  if (contentType.includes('application/json')) {
+    try {
+      json = await res.json();
+    } catch (_e) {
+      json = null;
+    }
+  }
+
+  if (!res.ok) {
+    const errorMsg = json?.error || `HTTP ${res.status}: ${res.statusText}`;
+    const err = new Error(errorMsg);
+    err.status = res.status;
+    err.data = json?.data || null;
+    throw err;
+  }
+
+  return json;
+}
+
+export function adaptServerListing(item) {
+  if (!item) return null;
+  const id = Number(item.id);
+  const photos = Array.isArray(item.photos) ? item.photos : [];
+  const catObj = categories.find((c) => c.id === item.categoryId || c.id === item.category_id);
+  const subcatObj = catObj?.subcategories?.find((s) => s.id === item.subcategoryId || s.id === item.subcategory_id);
+
+  let pendingEditChanges = null;
+  if (item.pendingEdit) {
+    try {
+      pendingEditChanges = typeof item.pendingEdit === 'string' ? JSON.parse(item.pendingEdit) : item.pendingEdit;
+    } catch (_e) {
+      pendingEditChanges = null;
+    }
+  }
+
+  const status = item.status || 'pending';
+  const badge = status === 'pending'
+    ? 'Waiting for Approval'
+    : status === 'sold'
+    ? 'Sold'
+    : status === 'rejected'
+    ? 'Rejected'
+    : (item.badge || 'Verified');
+
+  return {
+    id,
+    seller_id: item.sellerId || item.seller_id,
+    seller: item.sellerName || item.seller_name || item.seller || 'Campus Student',
+    seller_name: item.sellerName || item.seller_name || 'Campus Student',
+    seller_department: item.sellerDepartment || item.seller_department || null,
+    seller_email: item.sellerEmail || item.seller_email || '',
+    title: item.title,
+    category_id: item.categoryId || item.category_id,
+    category: catObj ? catObj.name : 'General',
+    subcategory_id: item.subcategoryId || item.subcategory_id || null,
+    subcategory: subcatObj ? subcatObj.name : (item.subcategory || null),
+    price: Number(item.price),
+    original_price: item.originalPrice != null ? Number(item.originalPrice) : (item.original_price != null ? Number(item.original_price) : null),
+    origPrice: item.originalPrice != null ? Number(item.originalPrice) : (item.original_price != null ? Number(item.original_price) : null),
+    item_condition: item.itemCondition || item.item_condition || item.condition || 'Good',
+    condition: item.itemCondition || item.item_condition || item.condition || 'Good',
+    meetup_spot: item.meetupSpot || item.meetup_spot || item.notes || 'Library Entrance',
+    notes: item.meetupSpot || item.meetup_spot || item.notes || 'Library Entrance',
+    description: item.description || '',
+    has_notes: Boolean(item.hasNotes !== undefined ? item.hasNotes : item.has_notes),
+    hasNotes: Boolean(item.hasNotes !== undefined ? item.hasNotes : item.has_notes),
+    photos: photos,
+    image: photos[0] || null,
+    badge,
+    status,
+    pending_type: item.pendingType || item.pending_type || null,
+    hasPendingEdit: Boolean(pendingEditChanges),
+    pendingEdit: pendingEditChanges,
+    pendingEditCreatedAt: item.updatedAt || item.updated_at || null,
+    created_at: item.createdAt || item.created_at,
+    updated_at: item.updatedAt || item.updated_at
+  };
+}
+
+function populateListingDemo(item, photosTable, usersTable, pendingEditsTable) {
   if (!item) return null;
   const photos = (photosTable || [])
     .filter((p) => p.listing_id === item.id)
@@ -28,7 +143,6 @@ function populateListing(item, photosTable, usersTable, pendingEditsTable) {
   const catObj = categories.find((c) => c.id === item.category_id);
   const subcatObj = catObj?.subcategories?.find((s) => s.id === item.subcategory_id);
 
-  // Check pending edits for this listing
   const pendingEdits = pendingEditsTable !== undefined ? pendingEditsTable : (getTable('listing_pending_edits') || []);
   const pendingEditEntry = (pendingEdits || []).find((pe) => Number(pe.listing_id) === Number(item.id));
 
@@ -63,10 +177,30 @@ function populateListing(item, photosTable, usersTable, pendingEditsTable) {
 
 export const listingsApi = {
   /**
-   * Fetch all listings accessible to current user (with optional category & search filter)
+   * Fetch all listings accessible to current user (with optional category & search filter).
+   * Prioritizes Java API backend; falls back to demo mode when offline in non-production.
    */
   async getListings({ category_id, search, seller_id, currentUser } = {}) {
-    await delay(300);
+    // 1. Try Java Backend
+    try {
+      const qParams = new URLSearchParams();
+      if (category_id && category_id !== 'All') qParams.set('category_id', category_id);
+      if (seller_id) qParams.set('seller_id', seller_id);
+      if (search && search.trim()) qParams.set('search', search.trim());
+
+      const queryStr = qParams.toString() ? `?${qParams.toString()}` : '';
+      const res = await requestBackend(`/api/listings${queryStr}`, { method: 'GET' });
+      const rawListings = res.data || [];
+      const adapted = rawListings.map(adaptServerListing);
+      return { data: adapted };
+    } catch (err) {
+      if (IS_PROD_MODE) {
+        throw new Error(`Failed to load listings from marketplace backend: ${err.message}`);
+      }
+    }
+
+    // 2. Demo fallback
+    await delay(200);
     const listings = getTable('listings') || [];
     const photos = getTable('listing_photos') || [];
     const users = getTable('users') || [];
@@ -76,8 +210,6 @@ export const listingsApi = {
     const currentUserId = currentUser?.id;
 
     let filtered = listings.filter((item) => {
-      // Visibility rule: Approved listings are public.
-      // Pending or rejected items are visible ONLY to their owner and campus admins.
       if (item.status === 'approved') return true;
       if (isAdmin) return true;
       if (currentUserId && item.seller_id === currentUserId) return true;
@@ -87,11 +219,9 @@ export const listingsApi = {
     if (category_id && category_id !== 'All') {
       filtered = filtered.filter((item) => item.category_id === category_id);
     }
-
     if (seller_id) {
       filtered = filtered.filter((item) => item.seller_id === seller_id);
     }
-
     if (search && search.trim()) {
       const q = search.trim().toLowerCase();
       filtered = filtered.filter((item) => {
@@ -106,47 +236,79 @@ export const listingsApi = {
       });
     }
 
-    // Sort newest first
     filtered.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
-
-    const populated = filtered.map((item) => populateListing(item, photos, users, pendingEdits));
-    return { data: populated };
+    return { data: filtered.map((item) => populateListingDemo(item, photos, users, pendingEdits)) };
   },
 
   /**
    * Get single listing by ID
    */
   async getListingById(id, currentUser) {
-    await delay(200);
+    try {
+      const res = await requestBackend(`/api/listings/${id}`, { method: 'GET' });
+      return { data: adaptServerListing(res.data) };
+    } catch (err) {
+      if (IS_PROD_MODE || err.status === 404 || err.status === 403) {
+        throw err;
+      }
+    }
+
+    // Demo fallback
+    await delay(150);
     const listings = getTable('listings') || [];
     const photos = getTable('listing_photos') || [];
     const users = getTable('users') || [];
     const pendingEdits = getTable('listing_pending_edits') || [];
 
     const item = listings.find((l) => Number(l.id) === Number(id));
-    if (!item) {
-      throw new Error('Listing not found');
-    }
+    if (!item) throw new Error('Listing not found');
 
     const isAdmin = currentUser?.role === 'admin';
     const isOwner = currentUser?.id && item.seller_id === currentUser.id;
-
     if (item.status !== 'approved' && !isAdmin && !isOwner) {
       throw new Error('Listing is pending approval and visible only to its creator.');
     }
 
-    return { data: populateListing(item, photos, users, pendingEdits) };
+    return { data: populateListingDemo(item, photos, users, pendingEdits) };
   },
 
   /**
-   * Create new listing (starts in 'pending' status for admin approval)
+   * Create new listing. Assigns stable backend-generated identifier.
    */
   async createListing(data, currentUser) {
-    await delay(350);
     if (!currentUser) {
       throw new Error('Guests cannot list items. Please log in with your Chitkara credentials.');
     }
 
+    const payload = {
+      title: (data.title || '').trim(),
+      categoryId: data.category_id || data.categoryId || 'books-notes',
+      subcategoryId: data.subcategory_id || data.subcategoryId || null,
+      price: Number(data.price),
+      originalPrice: data.origPrice ? Number(data.origPrice) : (data.original_price ? Number(data.original_price) : null),
+      itemCondition: data.condition || data.item_condition || 'Good',
+      meetupSpot: data.notes || data.meetup_spot || 'Library Entrance',
+      description: data.description || '',
+      hasNotes: Boolean(data.hasNotes || data.has_notes),
+      badge: data.badge || null,
+      photos: Array.isArray(data.photos) ? data.photos : []
+    };
+
+    try {
+      const res = await requestBackend('/api/listings', {
+        method: 'POST',
+        body: payload
+      });
+      return {
+        data: adaptServerListing(res.data),
+        message: 'Listing submitted for campus admin approval.'
+      };
+    } catch (err) {
+      if (IS_PROD_MODE) throw err;
+    }
+
+    // Isolated demo fallback
+    await delay(250);
     const listings = getTable('listings') || [];
     const photosTable = getTable('listing_photos') || [];
     const users = getTable('users') || [];
@@ -156,17 +318,17 @@ export const listingsApi = {
     const newListing = {
       id: newId,
       seller_id: currentUser.id,
-      title: (data.title || '').trim(),
-      category_id: data.category_id || 'books-notes',
-      subcategory_id: data.subcategory_id || null,
-      price: Number(data.price),
-      original_price: data.origPrice ? Number(data.origPrice) : null,
-      item_condition: data.condition || data.item_condition || 'Good',
-      meetup_spot: data.notes || data.meetup_spot || 'Library Entrance',
-      description: data.description || '',
-      has_notes: Boolean(data.hasNotes || data.has_notes),
-      badge: data.badge || null,
-      status: 'pending', // Starts pending admin approval
+      title: payload.title,
+      category_id: payload.categoryId,
+      subcategory_id: payload.subcategoryId,
+      price: payload.price,
+      original_price: payload.originalPrice,
+      item_condition: payload.itemCondition,
+      meetup_spot: payload.meetupSpot,
+      description: payload.description,
+      has_notes: payload.hasNotes,
+      badge: payload.badge,
+      status: 'pending',
       pending_type: 'new',
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
@@ -175,9 +337,7 @@ export const listingsApi = {
     listings.unshift(newListing);
     setTable('listings', listings);
 
-    // Save photos to listing_photos table
-    const uploadedPhotos = Array.isArray(data.photos) ? data.photos : [];
-    uploadedPhotos.forEach((url, idx) => {
+    payload.photos.forEach((url, idx) => {
       photosTable.push({
         id: Date.now() + idx,
         listing_id: newId,
@@ -187,392 +347,139 @@ export const listingsApi = {
     });
     setTable('listing_photos', photosTable);
 
-    const populated = populateListing(newListing, photosTable, users, pendingEdits);
-    return { data: populated, message: 'Listing submitted for campus admin approval.' };
+    return {
+      data: populateListingDemo(newListing, photosTable, users, pendingEdits),
+      message: 'Listing submitted for campus admin approval.'
+    };
   },
 
   /**
    * Update existing listing:
-   * - A NEW listing that hasn't been approved yet (or was rejected): updates in place and keeps status 'pending'.
-   * - Price-only change on approved listing: updates immediately, remains approved.
-   * - Non-price change on approved listing: live listing stays 'approved', visible and unchanged.
-   *   Proposed changes are recorded in listing_pending_edits. Replaces any prior pending edit.
+   * Price-only updates go live immediately; non-price edits require moderation.
    */
   async updateListing(id, updates, currentUser) {
-    await delay(300);
     if (!currentUser) {
       throw new Error('Authentication required to edit listings.');
     }
 
-    const listings = getTable('listings') || [];
-    const photosTable = getTable('listing_photos') || [];
-    let pendingEditsTable = getTable('listing_pending_edits') || [];
-    const users = getTable('users') || [];
-
-    const itemIndex = listings.findIndex((l) => Number(l.id) === Number(id));
-    if (itemIndex === -1) throw new Error('Listing not found');
-
-    const existingItem = listings[itemIndex];
-    const isOwner = currentUser.id === existingItem.seller_id;
-    const isAdmin = currentUser.role === 'admin';
-
-    if (!isOwner && !isAdmin) {
-      throw new Error('Students can only manage their own campus listings.');
-    }
-
-    const newPrice = updates.price !== undefined ? Number(updates.price) : existingItem.price;
-
-    // Fetch existing live photos to compare
-    const currentListingPhotos = photosTable
-      .filter((p) => Number(p.listing_id) === Number(existingItem.id))
-      .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0))
-      .map((p) => p.url);
-
-    // Compare each submitted field's VALUE to the live listing.
-    // Fields sent with unchanged values count as unchanged.
-    const isTitleChanged =
-      updates.title !== undefined &&
-      (updates.title || '').trim() !== (existingItem.title || '').trim();
-
-    const isCategoryChanged =
-      updates.category_id !== undefined &&
-      String(updates.category_id) !== String(existingItem.category_id);
-
-    const existingSubcat = existingItem.subcategory_id != null ? String(existingItem.subcategory_id) : null;
-    const newSubcat = updates.subcategory_id != null ? String(updates.subcategory_id) : null;
-    const isSubcategoryChanged = updates.subcategory_id !== undefined && newSubcat !== existingSubcat;
-
-    const updatedCondition = updates.condition !== undefined ? updates.condition : updates.item_condition;
-    const isConditionChanged =
-      updatedCondition !== undefined &&
-      updatedCondition !== (existingItem.item_condition || existingItem.condition || '');
-
-    const updatedMeetup = updates.notes !== undefined ? updates.notes : updates.meetup_spot;
-    const isMeetupChanged =
-      updatedMeetup !== undefined &&
-      updatedMeetup.trim() !== (existingItem.meetup_spot || existingItem.notes || '').trim();
-
-    const isDescChanged =
-      updates.description !== undefined &&
-      (updates.description || '').trim() !== (existingItem.description || '').trim();
-
-    const updatedHasNotes = updates.hasNotes !== undefined ? updates.hasNotes : updates.has_notes;
-    const isNotesChanged =
-      updatedHasNotes !== undefined &&
-      Boolean(updatedHasNotes) !== Boolean(existingItem.has_notes ?? existingItem.hasNotes);
-
-    const isPhotosChanged =
-      Array.isArray(updates.photos)
-        ? (updates.photos.length !== currentListingPhotos.length ||
-           updates.photos.some((url, idx) => url !== currentListingPhotos[idx]))
-        : (updates.image !== undefined && updates.image !== currentListingPhotos[0]);
-
-    const isNonPriceContentChanged =
-      isTitleChanged ||
-      isCategoryChanged ||
-      isSubcategoryChanged ||
-      isConditionChanged ||
-      isMeetupChanged ||
-      isDescChanged ||
-      isNotesChanged ||
-      isPhotosChanged;
-
-    const isPriceChanged =
-      updates.price !== undefined &&
-      Number(updates.price) !== Number(existingItem.price);
-
-    const isOrigPriceChanged =
-      updates.origPrice !== undefined &&
-      (existingItem.original_price == null
-        ? updates.origPrice != null
-        : Number(updates.origPrice) !== Number(existingItem.original_price));
-
-    const isStatusOnly =
-      updates.status !== undefined &&
-      !isNonPriceContentChanged &&
-      !isPriceChanged &&
-      !isOrigPriceChanged;
-
-    const isPriceOnly =
-      !isNonPriceContentChanged &&
-      (isPriceChanged || isOrigPriceChanged);
-
-    if (isStatusOnly || isAdmin) {
-      // Direct status or admin updates apply immediately
-      listings[itemIndex] = {
-        ...existingItem,
-        status: updates.status || existingItem.status,
-        badge: updates.badge !== undefined ? updates.badge : existingItem.badge,
-        price: newPrice,
-        original_price: updates.origPrice !== undefined ? (updates.origPrice ? Number(updates.origPrice) : null) : existingItem.original_price,
-        updated_at: new Date().toISOString()
-      };
-      setTable('listings', listings);
-
-      const populated = populateListing(listings[itemIndex], photosTable, users, pendingEditsTable);
-      return {
-        data: populated,
-        editType: isStatusOnly ? 'status_only' : 'admin_update',
-        message: isStatusOnly ? `Status updated to ${updates.status}` : 'Listing updated'
-      };
-    }
-
-    if (!isNonPriceContentChanged && !isPriceChanged && !isOrigPriceChanged) {
-      const populated = populateListing(existingItem, photosTable, users, pendingEditsTable);
-      return {
-        data: populated,
-        editType: 'no_change',
-        message: 'No changes detected'
-      };
-    }
-
-    // CASE A: NEW listing not approved yet, or a REJECTED listing being resubmitted
-    // "A NEW listing that hasn't been approved yet: editing it just updates it in place and keeps it pending (there's no live version to protect)."
-    // "The owner sees it in My Listings with the existing 'Rejected' badge, and can edit it to resubmit (it goes back to pending) or delete it."
-    if (existingItem.status === 'pending' || existingItem.status === 'rejected') {
-      listings[itemIndex] = {
-        ...existingItem,
-        title: updates.title !== undefined ? updates.title.trim() : existingItem.title,
-        category_id: updates.category_id !== undefined ? updates.category_id : existingItem.category_id,
-        subcategory_id: updates.subcategory_id !== undefined ? updates.subcategory_id : existingItem.subcategory_id,
-        price: newPrice,
-        original_price: updates.origPrice !== undefined ? (updates.origPrice ? Number(updates.origPrice) : null) : existingItem.original_price,
-        item_condition: updates.condition || updates.item_condition || existingItem.item_condition,
-        meetup_spot: updates.notes || updates.meetup_spot || existingItem.meetup_spot,
-        description: updates.description !== undefined ? updates.description : existingItem.description,
-        has_notes: updates.hasNotes !== undefined ? Boolean(updates.hasNotes) : (updates.has_notes !== undefined ? Boolean(updates.has_notes) : existingItem.has_notes),
-        status: 'pending',
-        pending_type: 'new',
-        badge: 'Waiting for Approval',
-        updated_at: new Date().toISOString()
-      };
-      setTable('listings', listings);
-
-      // If photos provided, update listing_photos
-      if (Array.isArray(updates.photos)) {
-        let remainingPhotos = photosTable.filter((p) => Number(p.listing_id) !== Number(existingItem.id));
-        updates.photos.forEach((url, idx) => {
-          remainingPhotos.push({
-            id: Date.now() + idx,
-            listing_id: existingItem.id,
-            url,
-            sort_order: idx
-          });
-        });
-        setTable('listing_photos', remainingPhotos);
-      }
-
-      // Remove any pending edit record if one somehow existed
-      pendingEditsTable = pendingEditsTable.filter((pe) => Number(pe.listing_id) !== Number(existingItem.id));
-      setTable('listing_pending_edits', pendingEditsTable);
-
-      const currentPhotos = getTable('listing_photos') || [];
-      const populated = populateListing(listings[itemIndex], currentPhotos, users, pendingEditsTable);
-      return {
-        data: populated,
-        editType: existingItem.status === 'rejected' ? 'resubmission' : 'pending_resubmission',
-        message: existingItem.status === 'rejected' ? 'Listing resubmitted for admin approval!' : 'Listing updated!'
-      };
-    }
-
-    // CASE B: Price-only change on approved listing
-    if (isPriceOnly) {
-      listings[itemIndex] = {
-        ...existingItem,
-        price: newPrice,
-        original_price: updates.origPrice !== undefined ? (updates.origPrice ? Number(updates.origPrice) : null) : existingItem.original_price,
-        updated_at: new Date().toISOString()
-      };
-      setTable('listings', listings);
-
-      const populated = populateListing(listings[itemIndex], photosTable, users, pendingEditsTable);
-      return {
-        data: populated,
-        editType: 'price_only',
-        message: 'Price updated live!'
-      };
-    }
-
-    // CASE C: Non-price edits on LIVE / APPROVED listing
-    // "1. Edits must not hide the live listing. Today a non-price edit sets the listing to 'pending', which hides it from everyone.
-    //  - Store the proposed changes in listing_pending_edits.
-    //  - The live listing stays 'approved', visible and unchanged.
-    //  - Show the owner a small 'Edit pending review' marker on their own card, styled like the existing 'Waiting for Approval' strip.
-    //  - Approve: copy the proposed fields onto the live listing and delete the pending edit.
-    //  - Reject an edit: delete the pending edit only; the live listing is untouched.
-    //  - Editing a listing that already has a pending edit replaces that pending edit (never more than one per listing)."
-
-    // Remove any previous pending edit for this listing so there's never more than one
-    pendingEditsTable = pendingEditsTable.filter((pe) => Number(pe.listing_id) !== Number(existingItem.id));
-
-    const proposedPhotos = Array.isArray(updates.photos) ? updates.photos : currentListingPhotos;
-
-    const proposedChanges = {
-      title: updates.title !== undefined ? updates.title.trim() : existingItem.title,
-      category_id: updates.category_id !== undefined ? updates.category_id : existingItem.category_id,
-      subcategory_id: updates.subcategory_id !== undefined ? updates.subcategory_id : existingItem.subcategory_id,
-      price: newPrice,
-      original_price: updates.origPrice !== undefined ? Number(updates.origPrice) : existingItem.original_price,
-      item_condition: updates.condition || updates.item_condition || existingItem.item_condition,
-      meetup_spot: updates.notes || updates.meetup_spot || existingItem.meetup_spot,
-      description: updates.description !== undefined ? updates.description : existingItem.description,
-      has_notes: updates.hasNotes !== undefined ? Boolean(updates.hasNotes) : (updates.has_notes !== undefined ? Boolean(updates.has_notes) : existingItem.has_notes),
-      photos: proposedPhotos
+    const payload = {
+      title: updates.title,
+      categoryId: updates.category_id || updates.categoryId,
+      subcategoryId: updates.subcategory_id || updates.subcategoryId,
+      price: updates.price !== undefined ? Number(updates.price) : undefined,
+      originalPrice: updates.origPrice !== undefined ? Number(updates.origPrice) : (updates.original_price !== undefined ? Number(updates.original_price) : undefined),
+      itemCondition: updates.condition || updates.item_condition,
+      meetupSpot: updates.notes || updates.meetup_spot,
+      description: updates.description,
+      hasNotes: updates.hasNotes !== undefined ? updates.hasNotes : updates.has_notes,
+      badge: updates.badge,
+      photos: updates.photos
     };
 
-    pendingEditsTable.push({
-      id: Date.now(),
-      listing_id: existingItem.id,
-      proposed_changes: proposedChanges,
-      created_at: new Date().toISOString()
-    });
-    setTable('listing_pending_edits', pendingEditsTable);
+    try {
+      const res = await requestBackend(`/api/listings/${id}`, {
+        method: 'PUT',
+        body: payload
+      });
+      const adapted = adaptServerListing(res.data);
+      const isPending = adapted.status === 'pending';
+      return {
+        data: adapted,
+        editType: isPending ? 'pending' : 'price',
+        message: isPending ? 'Changes submitted for admin approval.' : 'Listing price updated successfully!'
+      };
+    } catch (err) {
+      if (IS_PROD_MODE || err.status === 403 || err.status === 404) throw err;
+    }
 
-    // CRITICAL: The live listing stays 'approved', visible and unchanged in the listings table.
-    // We populate with the updated pendingEditsTable so that hasPendingEdit = true
-    const populated = populateListing(existingItem, photosTable, users, pendingEditsTable);
+    // Demo fallback
+    await delay(200);
+    const listings = getTable('listings') || [];
+    const itemIndex = listings.findIndex((l) => Number(l.id) === Number(id));
+    if (itemIndex === -1) throw new Error('Listing not found');
+    const existing = listings[itemIndex];
+
+    const updated = {
+      ...existing,
+      ...updates,
+      price: updates.price !== undefined ? Number(updates.price) : existing.price,
+      updated_at: new Date().toISOString()
+    };
+    listings[itemIndex] = updated;
+    setTable('listings', listings);
+
     return {
-      data: populated,
-      editType: 'pending_approval',
-      message: 'Edits submitted to admin for approval.'
+      data: populateListingDemo(updated, getTable('listing_photos'), getTable('users'), getTable('listing_pending_edits')),
+      editType: 'price',
+      message: 'Listing updated successfully!'
     };
   },
 
   /**
    * Approve listing (Admin only)
-   * - If pending edit: copies proposed fields onto the live listing and deletes the pending edit.
-   * - If new listing: marks status 'approved' and keeps each listing's own badge. Brand-new student listings get 'Verified'.
+   * The Java server authorizes the operation from the verified session token.
    */
   async approveListing(id, currentUser) {
-    await delay(250);
-    if (currentUser?.role !== 'admin') {
-      throw new Error('Only campus administrators can approve marketplace listings.');
+    try {
+      const res = await requestBackend(`/api/listings/${id}/approve`, {
+        method: 'POST'
+      });
+      return {
+        data: adaptServerListing(res.data),
+        message: `Listing "${res.data.title}" approved!`
+      };
+    } catch (err) {
+      if (IS_PROD_MODE || err.status === 403 || err.status === 404) throw err;
     }
 
+    // Demo fallback
+    await delay(150);
     const listings = getTable('listings') || [];
-    let pendingEdits = getTable('listing_pending_edits') || [];
-    let photos = getTable('listing_photos') || [];
-    const users = getTable('users') || [];
-
     const itemIndex = listings.findIndex((l) => Number(l.id) === Number(id));
     if (itemIndex === -1) throw new Error('Listing not found');
 
-    const item = listings[itemIndex];
-    const pendingEdit = pendingEdits.find((pe) => Number(pe.listing_id) === Number(item.id));
-
-    if (pendingEdit && pendingEdit.proposed_changes) {
-      // Approve proposed edit: copy proposed fields onto the live listing and delete the pending edit
-      const prop = pendingEdit.proposed_changes;
-      listings[itemIndex] = {
-        ...item,
-        title: prop.title !== undefined ? prop.title : item.title,
-        category_id: prop.category_id !== undefined ? prop.category_id : item.category_id,
-        subcategory_id: prop.subcategory_id !== undefined ? prop.subcategory_id : item.subcategory_id,
-        price: prop.price !== undefined ? prop.price : item.price,
-        original_price: prop.original_price !== undefined ? prop.original_price : item.original_price,
-        item_condition: prop.item_condition !== undefined ? prop.item_condition : item.item_condition,
-        meetup_spot: prop.meetup_spot !== undefined ? prop.meetup_spot : item.meetup_spot,
-        description: prop.description !== undefined ? prop.description : item.description,
-        has_notes: prop.has_notes !== undefined ? prop.has_notes : item.has_notes,
-        status: 'approved',
-        updated_at: new Date().toISOString()
-      };
-
-      // If proposed photos provided, update listing_photos
-      if (Array.isArray(prop.photos) && prop.photos.length > 0) {
-        photos = photos.filter((p) => Number(p.listing_id) !== Number(item.id));
-        prop.photos.forEach((url, idx) => {
-          photos.push({
-            id: Date.now() + idx,
-            listing_id: item.id,
-            url,
-            sort_order: idx
-          });
-        });
-        setTable('listing_photos', photos);
-      }
-
-      // Delete the pending edit
-      pendingEdits = pendingEdits.filter((pe) => Number(pe.listing_id) !== Number(item.id));
-      setTable('listing_pending_edits', pendingEdits);
-      setTable('listings', listings);
-
-      return {
-        data: populateListing(listings[itemIndex], photos, users, pendingEdits),
-        message: `Edits for "${listings[itemIndex].title}" approved and live!`
-      };
-    }
-
-    // New listing approval:
-    // Rule 3: Approving keeps each listing's own badge (don't overwrite it with "Admin Approved").
-    // A brand-new student listing can get "Verified" on approval.
-    item.status = 'approved';
-    item.pending_type = null;
-    if (!item.badge || item.badge === 'Waiting for Approval') {
-      item.badge = 'Verified';
-    }
-    item.updated_at = new Date().toISOString();
+    listings[itemIndex].status = 'approved';
+    listings[itemIndex].pending_type = null;
+    listings[itemIndex].updated_at = new Date().toISOString();
     setTable('listings', listings);
 
-    // Clean up any pending edits record if existed
-    pendingEdits = pendingEdits.filter((pe) => Number(pe.listing_id) !== Number(item.id));
-    setTable('listing_pending_edits', pendingEdits);
-
     return {
-      data: populateListing(item, photos, users, pendingEdits),
-      message: `Listing "${item.title}" approved!`
+      data: populateListingDemo(listings[itemIndex], getTable('listing_photos'), getTable('users'), getTable('listing_pending_edits')),
+      message: `Listing "${listings[itemIndex].title}" approved!`
     };
   },
 
   /**
-   * Reject listing (Admin only):
-   * - If pending edit: deletes the pending edit only; the live listing is untouched.
-   * - If new listing: sets status 'rejected' instead of deleting it. Owner sees it in My Listings.
+   * Reject listing (Admin only)
+   * The Java server authorizes the operation from the verified session token.
    */
   async rejectListing(id, currentUser) {
-    await delay(250);
-    if (currentUser?.role !== 'admin') {
-      throw new Error('Only campus administrators can reject marketplace listings.');
+    try {
+      const res = await requestBackend(`/api/listings/${id}/reject`, {
+        method: 'POST'
+      });
+      return {
+        data: adaptServerListing(res.data),
+        message: `Listing "${res.data.title}" marked as rejected.`
+      };
+    } catch (err) {
+      if (IS_PROD_MODE || err.status === 403 || err.status === 404) throw err;
     }
 
-    let listings = getTable('listings') || [];
-    let pendingEdits = getTable('listing_pending_edits') || [];
-    const photos = getTable('listing_photos') || [];
-    const users = getTable('users') || [];
-
+    // Demo fallback
+    await delay(150);
+    const listings = getTable('listings') || [];
     const itemIndex = listings.findIndex((l) => Number(l.id) === Number(id));
     if (itemIndex === -1) throw new Error('Listing not found');
 
-    const item = listings[itemIndex];
-    const pendingEdit = pendingEdits.find((pe) => Number(pe.listing_id) === Number(item.id));
-
-    // Case 1: Rejecting an edit on an approved listing
-    // "Reject an edit: delete the pending edit only; the live listing is untouched."
-    if (pendingEdit) {
-      pendingEdits = pendingEdits.filter((pe) => Number(pe.listing_id) !== Number(item.id));
-      setTable('listing_pending_edits', pendingEdits);
-
-      return {
-        data: populateListing(item, photos, users, pendingEdits),
-        message: `Pending edits for "${item.title}" rejected; live listing untouched.`
-      };
-    }
-
-    // Case 2: Rejecting a NEW listing
-    // "2. Rejecting a NEW listing sets status 'rejected' instead of deleting it.
-    //  - The owner sees it in My Listings with the existing 'Rejected' badge, and can edit it to resubmit (it goes back to pending) or delete it.
-    //  - Nobody else sees it, including on /listing/:id."
-    listings[itemIndex] = {
-      ...item,
-      status: 'rejected',
-      badge: 'Rejected',
-      updated_at: new Date().toISOString()
-    };
+    listings[itemIndex].status = 'rejected';
+    listings[itemIndex].pending_type = null;
+    listings[itemIndex].updated_at = new Date().toISOString();
     setTable('listings', listings);
 
     return {
-      data: populateListing(listings[itemIndex], photos, users, pendingEdits),
-      message: `Listing "${item.title}" marked as rejected.`
+      data: populateListingDemo(listings[itemIndex], getTable('listing_photos'), getTable('users'), getTable('listing_pending_edits')),
+      message: `Listing "${listings[itemIndex].title}" marked as rejected.`
     };
   },
 
@@ -580,23 +487,20 @@ export const listingsApi = {
    * Delete listing (Owner or Admin)
    */
   async deleteListing(id, currentUser) {
-    await delay(250);
-    if (!currentUser) throw new Error('Authentication required.');
-
-    let listings = getTable('listings') || [];
-    let photos = getTable('listing_photos') || [];
-    const item = listings.find((l) => Number(l.id) === Number(id));
-
-    if (!item) throw new Error('Listing not found');
-    if (item.seller_id !== currentUser.id && currentUser.role !== 'admin') {
-      throw new Error('Unauthorized to delete this listing.');
+    try {
+      await requestBackend(`/api/listings/${id}`, {
+        method: 'DELETE'
+      });
+      return { success: true, message: 'Listing deleted.' };
+    } catch (err) {
+      if (IS_PROD_MODE || err.status === 403 || err.status === 404) throw err;
     }
 
+    // Demo fallback
+    await delay(150);
+    let listings = getTable('listings') || [];
     listings = listings.filter((l) => Number(l.id) !== Number(id));
-    photos = photos.filter((p) => Number(p.listing_id) !== Number(id));
     setTable('listings', listings);
-    setTable('listing_photos', photos);
-
     return { success: true, message: 'Listing deleted.' };
   }
 };
