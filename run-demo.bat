@@ -5,7 +5,7 @@ title UNIMART + UNI-GRAM Presentation Launcher
 
 echo ======================================================================
 echo    UNIMART + UNI-GRAM COLLEGE DEMO LAUNCHER
-echo    Chitkara University Student Marketplace & Campus Messenger
+echo    Chitkara University Student Marketplace and Campus Messenger
 echo ======================================================================
 echo.
 
@@ -74,7 +74,7 @@ echo.
 echo [3/5] Starting Uni-Gram Java server on port 8080...
 powershell -NoProfile -Command "try { $p = (Get-NetTCPConnection -LocalPort 8080 -ErrorAction SilentlyContinue).OwningProcess; if ($p) { Stop-Process -Id $p -Force -ErrorAction SilentlyContinue; Start-Sleep -Milliseconds 500 } } catch {}" >nul 2>&1
 
-start "Uni-Gram Java Backend" cmd /k "java -cp ""bin;lib/*"" com.unigram.Main --server"
+start "Uni-Gram Java Backend" cmd /k java -cp "bin;lib/*" com.unigram.Main --server
 
 :: Health check poll
 echo Verifying backend health at http://127.0.0.1:8080/api/health...
@@ -90,7 +90,7 @@ for /l %%i in (1, 1, 15) do (
         set BACKEND_UP=1
         set MYSQL_CONNECTED=0
       ) else (
-        timeout /t 1 /nobreak >nul
+        ping 127.0.0.1 -n 2 >nul
       )
     )
   )
@@ -119,7 +119,7 @@ if not exist "node_modules" (
   call npm install
 )
 
-start "UniMart Frontend (Vite)" cmd /k "npm run dev"
+start "UniMart Frontend (Vite)" cmd /k npm run dev
 cd /d "%~dp0"
 
 :: 5. Wait for Frontend and Launch Browser
@@ -132,7 +132,7 @@ for /l %%i in (1, 1, 15) do (
     if not errorlevel 1 (
       set FRONTEND_UP=1
     ) else (
-      timeout /t 1 /nobreak >nul
+      ping 127.0.0.1 -n 2 >nul
     )
   )
 )
