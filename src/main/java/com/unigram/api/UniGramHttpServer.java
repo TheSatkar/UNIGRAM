@@ -22,7 +22,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class UniGramHttpServer {
 
     public static final String ENV_API_PORT = "UNIGRAM_API_PORT";
-    public static final String DEFAULT_HOST = "127.0.0.1";
+    public static final String DEFAULT_HOST = "0.0.0.0";
     public static final int DEFAULT_PORT = 8080;
     public static final int THREAD_POOL_SIZE = 10;
 
@@ -197,7 +197,8 @@ public class UniGramHttpServer {
     }
 
     public String getBaseUrl() {
-        return "http://" + host + ":" + actualPort;
+        String displayHost = "0.0.0.0".equals(host) ? "127.0.0.1" : host;
+        return "http://" + displayHost + ":" + actualPort;
     }
 
     public DatabaseConfig getDbConfig() {

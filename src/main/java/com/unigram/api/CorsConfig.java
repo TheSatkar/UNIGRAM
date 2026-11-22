@@ -18,10 +18,10 @@ import java.util.Set;
 public class CorsConfig {
 
     public static final String ENV_CORS_ORIGINS = "UNIGRAM_CORS_ORIGINS";
-    public static final String DEFAULT_ORIGINS = "http://localhost:5173,http://localhost:3000";
+    public static final String DEFAULT_ORIGINS = "http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000,http://127.0.0.1:3000";
 
-    public static final String ALLOWED_METHODS = "GET, POST, OPTIONS";
-    public static final String ALLOWED_HEADERS = "Content-Type, X-Dev-User-Id";
+    public static final String ALLOWED_METHODS = "GET, POST, PUT, DELETE, OPTIONS, HEAD";
+    public static final String ALLOWED_HEADERS = "Content-Type, Authorization, X-Require-Durable, X-Dev-User-Id, Accept, Origin, X-Requested-With";
     public static final String MAX_AGE_SECONDS = "86400";
 
     private final Set<String> allowedOrigins;
@@ -58,7 +58,11 @@ public class CorsConfig {
         if (origin == null || origin.trim().isEmpty()) {
             return false;
         }
-        return allowedOrigins.contains(origin.trim());
+        String clean = origin.trim().toLowerCase();
+        if (clean.startsWith("http://localhost:") || clean.startsWith("http://127.0.0.1:")) {
+            return true;
+        }
+        return allowedOrigins.contains(clean);
     }
 
     /**
@@ -74,7 +78,16 @@ public class CorsConfig {
                 Headers responseHeaders = exchange.getResponseHeaders();
                 responseHeaders.set("Access-Control-Allow-Origin", origin);
                 responseHeaders.set("Access-Control-Allow-Methods", ALLOWED_METHODS);
-                responseHeaders.set("Access-Control-Allow-Headers", ALLOWED_HEADERS);
+
+                List<String> reqHeaders = exchange.getRequestHeaders().get("Access-Control-Request-Headers");
+                if (reqHeaders != null && !reqHeaders.isEmpty()) {
+                    responseHeaders.set("Access-Control-Allow-Headers", String.join(", ", reqHeaders));
+                } else {
+                    responseHeaders.set("Access-Control-Allow-Headers", ALLOWED_HEADERS);
+                }
+
+                responseHeaders.set("Access-Control-Allow-Credentials", "true");
+                responseHeaders.set("Access-Control-Expose-Headers", "X-UniMart-Persistence, Authorization, Content-Type");
                 responseHeaders.set("Access-Control-Max-Age", MAX_AGE_SECONDS);
                 responseHeaders.set("Vary", "Origin");
             }
