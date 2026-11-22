@@ -164,6 +164,21 @@ public class ApiRouter implements HttpHandler {
             Conversation c = inMemoryChatService.createConversation("student_b", "student_a", "5");
             inMemoryMessageService.sendMessage(c.getConversationId(), "student_b",
                     "Hi Satkar, is the Organic Chemistry book still available for meetup at Library Entrance?");
+
+            // If MySQL is active, seed the demo accounts to the database as well
+            if (isDatabaseAvailable()) {
+                try (Connection conn = DatabaseConnectionFactory.getConnection(config)) {
+                    if (!userDao.existsById(conn, "admin_1")) {
+                        userDao.insert(conn, admin);
+                    }
+                    if (!userDao.existsById(conn, "student_a")) {
+                        userDao.insert(conn, satkar);
+                    }
+                    if (!userDao.existsById(conn, "student_b")) {
+                        userDao.insert(conn, priya);
+                    }
+                } catch (Exception ignored) {}
+            }
         } catch (Exception ignored) {}
     }
 
@@ -757,14 +772,6 @@ public class ApiRouter implements HttpHandler {
         listing.setPendingType("admin".equalsIgnoreCase(session.getRole()) ? null : "new");
         listing.setPhotos(req.getPhotos() != null ? req.getPhotos() : new ArrayList<>());
 
-        // Always save to memory
-        long id = inMemoryStorage.saveListing(listing);
-        listing.setId(id);
-
-        // Also register product reference so chat works smoothly
-        ProductReference ref = new ProductReference(String.valueOf(id), listing.getTitle());
-        inMemoryChatService.registerProduct(ref);
-
         if (isDatabaseAvailable()) {
             try (Connection conn = DatabaseConnectionFactory.getConnection(config)) {
                 conn.setAutoCommit(false);
@@ -778,6 +785,11 @@ public class ApiRouter implements HttpHandler {
                     }
                     productDao.insert(conn, new ProductReference(String.valueOf(dbId), listing.getTitle()));
                     conn.commit();
+
+                    // Only after successful database commit, cache in memory using the EXACT same dbId
+                    inMemoryStorage.saveListing(listing);
+                    ProductReference ref = new ProductReference(String.valueOf(dbId), listing.getTitle());
+                    inMemoryChatService.registerProduct(ref);
                 } catch (SQLException e) {
                     conn.rollback();
                     sendJson(exchange, 500, ApiResponse.error("Database error creating listing: " + e.getMessage()));
@@ -789,6 +801,12 @@ public class ApiRouter implements HttpHandler {
                 sendJson(exchange, 500, ApiResponse.error("Database connection failure: " + e.getMessage()));
                 return;
             }
+        } else {
+            // Pure in-memory mode (when MySQL is unconfigured or unavailable)
+            long id = inMemoryStorage.saveListing(listing);
+            listing.setId(id);
+            ProductReference ref = new ProductReference(String.valueOf(id), listing.getTitle());
+            inMemoryChatService.registerProduct(ref);
         }
 
         sendJson(exchange, 201, ApiResponse.created(listing));

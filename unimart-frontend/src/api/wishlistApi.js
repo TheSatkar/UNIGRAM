@@ -9,6 +9,7 @@
 import { getTable, setTable, delay } from './db.js';
 import { listingsApi, adaptServerListing } from './listingsApi.js';
 import { authApi } from './authApi.js';
+import { isIntegratedMode } from '../lib/appMode.js';
 
 const API_BASE_URL = (import.meta.env.VITE_UNIGRAM_API_BASE_URL || 'http://127.0.0.1:8080').replace(/\/+$/, '');
 const IS_PROD_MODE = Boolean(
@@ -69,7 +70,7 @@ export const wishlistApi = {
       throw new Error('Please log in with your Chitkara account to view your wishlist.');
     }
 
-    try {
+    if (isIntegratedMode()) {
       const res = await requestWishlist('/api/wishlist', { method: 'GET' });
       const payload = res.data || {};
       const rawItems = payload.data || [];
@@ -78,13 +79,9 @@ export const wishlistApi = {
         data: rawItems.map(adaptServerListing),
         listingIds: listingIds.map(Number)
       };
-    } catch (err) {
-      if (IS_PROD_MODE || err.status === 401) {
-        throw err;
-      }
     }
 
-    // Demo fallback
+    // Demo fallback (only in explicit OFFLINE mode)
     await delay(150);
     const wishlistTable = getTable('wishlist') || [];
     const userWishlist = wishlistTable.filter((w) => w.user_id === userId);
@@ -110,19 +107,15 @@ export const wishlistApi = {
       throw new Error('Please log in with your Chitkara account to save items.');
     }
 
-    try {
+    if (isIntegratedMode()) {
       await requestWishlist('/api/wishlist', {
         method: 'POST',
         body: { listingId: Number(listingId) }
       });
       return { success: true, message: 'Added to wishlist!' };
-    } catch (err) {
-      if (IS_PROD_MODE || err.status === 401) {
-        throw err;
-      }
     }
 
-    // Demo fallback
+    // Demo fallback (only in explicit OFFLINE mode)
     await delay(100);
     const wishlistTable = getTable('wishlist') || [];
     const exists = wishlistTable.some(
@@ -149,18 +142,14 @@ export const wishlistApi = {
       throw new Error('Authentication required.');
     }
 
-    try {
+    if (isIntegratedMode()) {
       await requestWishlist(`/api/wishlist/${listingId}`, {
         method: 'DELETE'
       });
       return { success: true, message: 'Removed from wishlist.' };
-    } catch (err) {
-      if (IS_PROD_MODE || err.status === 401) {
-        throw err;
-      }
     }
 
-    // Demo fallback
+    // Demo fallback (only in explicit OFFLINE mode)
     await delay(100);
     let wishlistTable = getTable('wishlist') || [];
     wishlistTable = wishlistTable.filter(

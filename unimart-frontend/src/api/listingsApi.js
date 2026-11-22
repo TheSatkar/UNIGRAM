@@ -18,6 +18,7 @@
 import { getTable, setTable, delay } from './db.js';
 import { categories } from '../lib/categories.js';
 import { authApi } from './authApi.js';
+import { isIntegratedMode } from '../lib/appMode.js';
 
 const API_BASE_URL = (import.meta.env.VITE_UNIGRAM_API_BASE_URL || 'http://127.0.0.1:8080').replace(/\/+$/, '');
 const IS_PROD_MODE = Boolean(
@@ -181,25 +182,24 @@ export const listingsApi = {
    * Prioritizes Java API backend; falls back to demo mode when offline in non-production.
    */
   async getListings({ category_id, search, seller_id, currentUser } = {}) {
-    // 1. Try Java Backend
-    try {
-      const qParams = new URLSearchParams();
-      if (category_id && category_id !== 'All') qParams.set('category_id', category_id);
-      if (seller_id) qParams.set('seller_id', seller_id);
-      if (search && search.trim()) qParams.set('search', search.trim());
+    if (isIntegratedMode()) {
+      try {
+        const qParams = new URLSearchParams();
+        if (category_id && category_id !== 'All') qParams.set('category_id', category_id);
+        if (seller_id) qParams.set('seller_id', seller_id);
+        if (search && search.trim()) qParams.set('search', search.trim());
 
-      const queryStr = qParams.toString() ? `?${qParams.toString()}` : '';
-      const res = await requestBackend(`/api/listings${queryStr}`, { method: 'GET' });
-      const rawListings = res.data || [];
-      const adapted = rawListings.map(adaptServerListing);
-      return { data: adapted };
-    } catch (err) {
-      if (IS_PROD_MODE) {
-        throw new Error(`Failed to load listings from marketplace backend: ${err.message}`);
+        const queryStr = qParams.toString() ? `?${qParams.toString()}` : '';
+        const res = await requestBackend(`/api/listings${queryStr}`, { method: 'GET' });
+        const rawListings = res.data || [];
+        const adapted = rawListings.map(adaptServerListing);
+        return { data: adapted };
+      } catch (err) {
+        throw new Error(`Cannot connect to Uni-Gram Java server (${API_BASE_URL}). Ensure the backend is running on port 8080 (or switch to OFFLINE DEMO mode). Error: ${err.message}`);
       }
     }
 
-    // 2. Demo fallback
+    // 2. Demo fallback (only in explicit OFFLINE mode)
     await delay(200);
     const listings = getTable('listings') || [];
     const photos = getTable('listing_photos') || [];
@@ -244,16 +244,12 @@ export const listingsApi = {
    * Get single listing by ID
    */
   async getListingById(id, currentUser) {
-    try {
+    if (isIntegratedMode()) {
       const res = await requestBackend(`/api/listings/${id}`, { method: 'GET' });
       return { data: adaptServerListing(res.data) };
-    } catch (err) {
-      if (IS_PROD_MODE || err.status === 404 || err.status === 403) {
-        throw err;
-      }
     }
 
-    // Demo fallback
+    // Demo fallback (only in explicit OFFLINE mode)
     await delay(150);
     const listings = getTable('listings') || [];
     const photos = getTable('listing_photos') || [];
@@ -294,7 +290,7 @@ export const listingsApi = {
       photos: Array.isArray(data.photos) ? data.photos : []
     };
 
-    try {
+    if (isIntegratedMode()) {
       const res = await requestBackend('/api/listings', {
         method: 'POST',
         body: payload
@@ -303,11 +299,9 @@ export const listingsApi = {
         data: adaptServerListing(res.data),
         message: 'Listing submitted for campus admin approval.'
       };
-    } catch (err) {
-      if (IS_PROD_MODE) throw err;
     }
 
-    // Isolated demo fallback
+    // Isolated demo fallback (only in explicit OFFLINE mode)
     await delay(250);
     const listings = getTable('listings') || [];
     const photosTable = getTable('listing_photos') || [];
@@ -376,7 +370,7 @@ export const listingsApi = {
       photos: updates.photos
     };
 
-    try {
+    if (isIntegratedMode()) {
       const res = await requestBackend(`/api/listings/${id}`, {
         method: 'PUT',
         body: payload
@@ -388,11 +382,9 @@ export const listingsApi = {
         editType: isPending ? 'pending' : 'price',
         message: isPending ? 'Changes submitted for admin approval.' : 'Listing price updated successfully!'
       };
-    } catch (err) {
-      if (IS_PROD_MODE || err.status === 403 || err.status === 404) throw err;
     }
 
-    // Demo fallback
+    // Demo fallback (only in explicit OFFLINE mode)
     await delay(200);
     const listings = getTable('listings') || [];
     const itemIndex = listings.findIndex((l) => Number(l.id) === Number(id));
@@ -420,7 +412,7 @@ export const listingsApi = {
    * The Java server authorizes the operation from the verified session token.
    */
   async approveListing(id, currentUser) {
-    try {
+    if (isIntegratedMode()) {
       const res = await requestBackend(`/api/listings/${id}/approve`, {
         method: 'POST'
       });
@@ -428,11 +420,9 @@ export const listingsApi = {
         data: adaptServerListing(res.data),
         message: `Listing "${res.data.title}" approved!`
       };
-    } catch (err) {
-      if (IS_PROD_MODE || err.status === 403 || err.status === 404) throw err;
     }
 
-    // Demo fallback
+    // Demo fallback (only in explicit OFFLINE mode)
     await delay(150);
     const listings = getTable('listings') || [];
     const itemIndex = listings.findIndex((l) => Number(l.id) === Number(id));
@@ -454,7 +444,7 @@ export const listingsApi = {
    * The Java server authorizes the operation from the verified session token.
    */
   async rejectListing(id, currentUser) {
-    try {
+    if (isIntegratedMode()) {
       const res = await requestBackend(`/api/listings/${id}/reject`, {
         method: 'POST'
       });
@@ -462,11 +452,9 @@ export const listingsApi = {
         data: adaptServerListing(res.data),
         message: `Listing "${res.data.title}" marked as rejected.`
       };
-    } catch (err) {
-      if (IS_PROD_MODE || err.status === 403 || err.status === 404) throw err;
     }
 
-    // Demo fallback
+    // Demo fallback (only in explicit OFFLINE mode)
     await delay(150);
     const listings = getTable('listings') || [];
     const itemIndex = listings.findIndex((l) => Number(l.id) === Number(id));
@@ -487,16 +475,14 @@ export const listingsApi = {
    * Delete listing (Owner or Admin)
    */
   async deleteListing(id, currentUser) {
-    try {
+    if (isIntegratedMode()) {
       await requestBackend(`/api/listings/${id}`, {
         method: 'DELETE'
       });
       return { success: true, message: 'Listing deleted.' };
-    } catch (err) {
-      if (IS_PROD_MODE || err.status === 403 || err.status === 404) throw err;
     }
 
-    // Demo fallback
+    // Demo fallback (only in explicit OFFLINE mode)
     await delay(150);
     let listings = getTable('listings') || [];
     listings = listings.filter((l) => Number(l.id) !== Number(id));

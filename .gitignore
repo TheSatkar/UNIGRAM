@@ -50,7 +50,8 @@ desktop.ini
 *.trace.db
 
 # Local libraries and credentials
-lib/
+/lib/
+!unimart-frontend/src/lib/
 *.env
 .env
 

@@ -3,6 +3,7 @@ import { useAuth } from './AuthContext.jsx';
 import { unigramApi } from '../services/unigramApi.js';
 import { mockListings } from '../data/mockListings.js';
 import { SEEDED_USERS } from '../lib/mockUsers.js';
+import { isIntegratedMode, isOfflineMode } from '../lib/appMode.js';
 
 const ChatContext = createContext(null);
 
@@ -196,11 +197,15 @@ export function ChatProvider({ children }) {
 
       const javaConvs = res.data || [];
       if (javaConvs.length === 0) {
-        // Fallback to user-scoped stored conversations if backend is empty
-        const userStored = loadStoredConversations(currentUserId);
-        if (userStored.length > 0) {
-          setConversations(userStored);
-          setActiveConversationId((prev) => (userStored.some((c) => c.id === prev) ? prev : userStored[0].id));
+        if (isOfflineMode()) {
+          // Fallback to user-scoped stored conversations only in explicit offline mode
+          const userStored = loadStoredConversations(currentUserId);
+          if (userStored.length > 0) {
+            setConversations(userStored);
+            setActiveConversationId((prev) => (userStored.some((c) => c.id === prev) ? prev : userStored[0].id));
+          }
+        } else {
+          setConversations([]);
         }
         return;
       }
@@ -274,11 +279,14 @@ export function ChatProvider({ children }) {
     } catch (err) {
       console.warn('[Uni-Gram Chat] Failed to load conversations from Java backend:', err.message);
       setBackendConnected(false);
-      // Seamlessly fall back to user-scoped local cache
-      const userStored = loadStoredConversations(currentUserId);
-      if (userStored.length > 0) {
-        setConversations(userStored);
-        setActiveConversationId((prev) => (userStored.some((c) => c.id === prev) ? prev : userStored[0].id));
+      if (isOfflineMode()) {
+        const userStored = loadStoredConversations(currentUserId);
+        if (userStored.length > 0) {
+          setConversations(userStored);
+          setActiveConversationId((prev) => (userStored.some((c) => c.id === prev) ? prev : userStored[0].id));
+        }
+      } else {
+        setApiError(`Uni-Gram Java server unreachable on port 8080: ${err.message}`);
       }
     }
   }, [currentUserId]);
@@ -694,61 +702,63 @@ export function ChatProvider({ children }) {
       loadConversationsFromBackend();
 
     } catch (err) {
-      console.warn('[Uni-Gram Chat] Send message failed, applying local fallback:', err);
-      const localMsg = {
-        id: 'msg_local_' + Date.now(),
-        sender: 'user',
-        senderId: currentUserId,
-        senderName: user?.name || 'You',
-        timestamp: formatTime(new Date().toISOString()),
-        date: 'Today',
-        type: 'text',
-        text: cleanText,
-        readReceipt: 'Delivered',
-        rawSentAt: new Date().toISOString(),
-        reactions: []
-      };
-
-      setConversations((prev) =>
-        prev.map((c) => {
-          if (c.id === targetConvId || c.conversationId === targetConvId) {
-            return {
-              ...c,
-              lastUpdated: Date.now(),
-              messages: [...(c.messages || []), localMsg]
-            };
-          }
-          return c;
-        })
-      );
-
-      persistStoredConversations(currentUserId, (prevStored) => {
-        let found = false;
-        const next = prevStored.map((c) => {
-          if (c.id === targetConvId || c.conversationId === targetConvId) {
-            found = true;
-            return {
-              ...c,
-              lastUpdated: Date.now(),
-              messages: [...(c.messages || []), localMsg]
-            };
-          }
-          return c;
-        });
-        if (!found && activeConv) {
-          next.push({
-            ...activeConv,
-            id: targetConvId,
-            conversationId: targetConvId,
-            lastUpdated: Date.now(),
-            messages: [localMsg]
-          });
-        }
-        return next;
-      });
-
+      console.warn('[Uni-Gram Chat] Send message failed:', err);
       setBackendConnected(false);
-      setApiError('Java backend offline (http://127.0.0.1:8080). Message queued locally; start Main.java (Option 15) to persist to MySQL.');
+      setApiError('Message failed to deliver to Uni-Gram server: ' + (err.message || 'Server offline'));
+
+      if (isOfflineMode()) {
+        const localMsg = {
+          id: 'msg_local_' + Date.now(),
+          sender: 'user',
+          senderId: currentUserId,
+          senderName: user?.name || 'You',
+          timestamp: formatTime(new Date().toISOString()),
+          date: 'Today',
+          type: 'text',
+          text: cleanText,
+          readReceipt: 'Offline Demo',
+          rawSentAt: new Date().toISOString(),
+          reactions: []
+        };
+
+        setConversations((prev) =>
+          prev.map((c) => {
+            if (c.id === targetConvId || c.conversationId === targetConvId) {
+              return {
+                ...c,
+                lastUpdated: Date.now(),
+                messages: [...(c.messages || []), localMsg]
+              };
+            }
+            return c;
+          })
+        );
+
+        persistStoredConversations(currentUserId, (prevStored) => {
+          let found = false;
+          const next = prevStored.map((c) => {
+            if (c.id === targetConvId || c.conversationId === targetConvId) {
+              found = true;
+              return {
+                ...c,
+                lastUpdated: Date.now(),
+                messages: [...(c.messages || []), localMsg]
+              };
+            }
+            return c;
+          });
+          if (!found && activeConv) {
+            next.push({
+              ...activeConv,
+              id: targetConvId,
+              conversationId: targetConvId,
+              lastUpdated: Date.now(),
+              messages: [localMsg]
+            });
+          }
+          return next;
+        });
+      }
     } finally {
       setSending(false);
     }

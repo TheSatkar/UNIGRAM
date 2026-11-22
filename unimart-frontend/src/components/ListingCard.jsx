@@ -101,19 +101,19 @@ export default function ListingCard({
 
             {/* Status Badge: In My Listings show Pending / Approved / Rejected / Sold */}
             {catalogTab === 'my' ? (
-              <span className={`unimart-pending-timer-badge status-badge-${item.status || 'approved'}`} title={`Status: ${item.status || 'approved'}`}>
-                <span className={`material-symbols-outlined ${item.status === 'pending' ? 'unimart-timer-pulse' : ''}`} style={{ fontSize: '14px' }}>
-                  {item.status === 'pending' ? 'schedule' : item.status === 'sold' ? 'sell' : item.status === 'rejected' ? 'cancel' : 'check_circle'}
+              <span className={`unimart-pending-timer-badge status-badge-${item.status || 'approved'}`} title={`Status: ${item.status || 'approved'}${item.hasPendingEdit ? ' (Edit pending admin review)' : ''}`}>
+                <span className={`material-symbols-outlined ${item.status === 'pending' || item.hasPendingEdit ? 'unimart-timer-pulse' : ''}`} style={{ fontSize: '14px' }}>
+                  {item.status === 'pending' ? 'schedule' : item.status === 'sold' ? 'sell' : item.status === 'rejected' ? 'cancel' : item.hasPendingEdit ? 'edit_note' : 'check_circle'}
                 </span>
                 <span>
-                  {item.status === 'pending' ? 'Pending' : item.status === 'sold' ? 'Sold' : item.status === 'rejected' ? 'Rejected' : 'Approved'}
+                  {item.status === 'pending' ? 'Pending Approval' : item.status === 'sold' ? 'Sold' : item.status === 'rejected' ? 'Rejected' : item.hasPendingEdit ? 'Approved • Edit Pending' : 'Approved'}
                 </span>
               </span>
             ) : (
               item.status === 'pending' && (
                 <span className="unimart-pending-timer-badge" title="Waiting to be approved by campus admin">
                   <span className="material-symbols-outlined unimart-timer-pulse">schedule</span>
-                  <span>Waiting to be approved</span>
+                  <span>Waiting for Approval</span>
                 </span>
               )
             )}

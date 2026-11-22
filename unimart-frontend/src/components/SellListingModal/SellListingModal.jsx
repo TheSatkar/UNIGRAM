@@ -142,13 +142,25 @@ export default function SellListingModal({
               >
                 <span className="material-symbols-outlined unimart-timer-pulse" style={{ fontSize: '40px' }}>schedule</span>
               </div>
-              <h4 className="fw-bold mb-2">{isEditing ? 'Edits Submitted for Approval!' : 'Item Submitted for Approval!'}</h4>
+              <h4 className="fw-bold mb-2">{isEditing ? 'Listing Edits Submitted for Admin Review' : 'New Listing Submitted for Admin Review'}</h4>
               <div className="d-inline-flex align-items-center gap-1 px-3 py-1 rounded-pill mb-3" style={{ background: 'rgba(245, 158, 11, 0.12)', color: '#b45309', fontSize: '0.82rem', fontWeight: 600 }}>
                 <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>hourglass_top</span>
-                <span>⏳ Waiting for Approval (Sent to Admin Panel)</span>
+                <span>{isEditing ? '⏳ Pending Review (Live Listing Active)' : '⏳ Waiting for Approval (New Listing)'}</span>
               </div>
-              <p className="text-muted small mb-4" style={{ maxWidth: '400px', margin: '0 auto' }}>
-                Your updated details for <strong>"{formData.title}"</strong> have been sent to the Admin Panel under <em>Pending Approvals</em>. A campus admin will review and approve the changes.
+              <p className="text-muted small mb-4" style={{ maxWidth: '440px', margin: '0 auto' }}>
+                {isEditing ? (
+                  <>
+                    Proposed edits for <strong>"{formData.title}"</strong> have been submitted to campus admins for review.
+                    <br />
+                    <span className="text-success fw-semibold mt-1 d-inline-block">
+                      ✓ Your current approved listing remains live and visible to buyers while edits are reviewed.
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    Your new listing <strong>"{formData.title}"</strong> has been submitted to the Admin Panel. It will become visible to fellow Chitkara students once approved.
+                  </>
+                )}
               </p>
               <div className="d-flex justify-content-center gap-2">
                 <button

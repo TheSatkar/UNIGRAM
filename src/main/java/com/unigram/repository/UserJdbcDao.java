@@ -20,12 +20,24 @@ public class UserJdbcDao {
      * Inserts a new user record.
      */
     public boolean insert(Connection conn, User user) throws SQLException {
-        String sql = "INSERT INTO users (user_id, display_name, email) VALUES (?, ?, ?)";
-        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+        String sqlFull = "INSERT INTO users (user_id, display_name, email, role, student_id, password_hash) VALUES (?, ?, ?, ?, ?, ?)";
+        try (PreparedStatement stmt = conn.prepareStatement(sqlFull)) {
             stmt.setString(1, user.getUserId());
             stmt.setString(2, user.getFullName());
             stmt.setString(3, user.getEmail() != null ? user.getEmail() : "");
+            stmt.setString(4, user.getRole() != null ? user.getRole() : "student");
+            stmt.setString(5, user.getStudentId() != null ? user.getStudentId() : "");
+            stmt.setString(6, user.getPasswordHash() != null ? user.getPasswordHash() : "");
             return stmt.executeUpdate() > 0;
+        } catch (SQLException e) {
+            // Graceful fallback if role/student_id/password_hash columns do not exist (Phase 1-5 legacy schema)
+            String sqlLegacy = "INSERT INTO users (user_id, display_name, email) VALUES (?, ?, ?)";
+            try (PreparedStatement stmt = conn.prepareStatement(sqlLegacy)) {
+                stmt.setString(1, user.getUserId());
+                stmt.setString(2, user.getFullName());
+                stmt.setString(3, user.getEmail() != null ? user.getEmail() : "");
+                return stmt.executeUpdate() > 0;
+            }
         }
     }
 
@@ -33,7 +45,7 @@ public class UserJdbcDao {
      * Finds a user by ID.
      */
     public Optional<User> findById(Connection conn, String userId) throws SQLException {
-        String sql = "SELECT user_id, display_name, email FROM users WHERE user_id = ?";
+        String sql = "SELECT * FROM users WHERE user_id = ?";
         try (PreparedStatement stmt = conn.prepareStatement(sql)) {
             stmt.setString(1, userId);
             try (ResultSet rs = stmt.executeQuery()) {
@@ -49,7 +61,7 @@ public class UserJdbcDao {
      * Retrieves all users.
      */
     public List<User> findAll(Connection conn) throws SQLException {
-        String sql = "SELECT user_id, display_name, email FROM users ORDER BY created_at ASC";
+        String sql = "SELECT * FROM users ORDER BY created_at ASC";
         List<User> list = new ArrayList<>();
         try (PreparedStatement stmt = conn.prepareStatement(sql);
              ResultSet rs = stmt.executeQuery()) {
@@ -130,7 +142,7 @@ public class UserJdbcDao {
         if (email == null || email.trim().isEmpty()) {
             return Optional.empty();
         }
-        String sql = "SELECT user_id, display_name, email FROM users WHERE LOWER(email) = LOWER(?)";
+        String sql = "SELECT * FROM users WHERE LOWER(email) = LOWER(?)";
         try (PreparedStatement stmt = conn.prepareStatement(sql)) {
             stmt.setString(1, email.trim());
             try (ResultSet rs = stmt.executeQuery()) {

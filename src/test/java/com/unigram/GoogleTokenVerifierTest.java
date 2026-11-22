@@ -2,9 +2,6 @@ package com.unigram;
 
 import com.unigram.api.JsonUtil;
 import com.unigram.security.GoogleTokenVerifier;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
 
 import java.nio.charset.StandardCharsets;
 import java.security.KeyPair;
@@ -13,14 +10,30 @@ import java.security.Signature;
 import java.util.Base64;
 import java.util.Map;
 
-import static org.junit.jupiter.api.Assertions.*;
-
 /**
  * Automated Negative and Positive Test Suite for Google ID Token Cryptographic Verification.
  * Enforces RSA-SHA256 signature, algorithm RS256, audience, issuer, expiry, email_verified,
  * and university domain constraints.
  */
 public class GoogleTokenVerifierTest {
+
+    @java.lang.annotation.Retention(java.lang.annotation.RetentionPolicy.RUNTIME)
+    public @interface Test {}
+
+    @java.lang.annotation.Retention(java.lang.annotation.RetentionPolicy.RUNTIME)
+    public @interface BeforeEach {}
+
+    @java.lang.annotation.Retention(java.lang.annotation.RetentionPolicy.RUNTIME)
+    public @interface AfterEach {}
+
+    private static void assertTrue(boolean cond) { if (!cond) throw new AssertionError("Expected true"); }
+    private static void assertTrue(boolean cond, String msg) { if (!cond) throw new AssertionError(msg); }
+    private static void assertFalse(boolean cond) { if (cond) throw new AssertionError("Expected false"); }
+    private static void assertFalse(boolean cond, String msg) { if (cond) throw new AssertionError(msg); }
+    private static void assertNotNull(Object obj) { if (obj == null) throw new AssertionError("Expected not null"); }
+    private static void assertEquals(Object expected, Object actual) {
+        if (!java.util.Objects.equals(expected, actual)) throw new AssertionError("Expected " + expected + " but got " + actual);
+    }
 
     private KeyPair validKeyPair;
     private KeyPair attackerKeyPair;

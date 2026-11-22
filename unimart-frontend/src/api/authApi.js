@@ -14,6 +14,7 @@
 
 import { getTable, setTable, delay } from './db.js';
 import { sha256Hex } from '../lib/crypto.js';
+import { isIntegratedMode } from '../lib/appMode.js';
 
 const API_BASE_URL = (import.meta.env.VITE_UNIGRAM_API_BASE_URL || 'http://127.0.0.1:8080').replace(/\/+$/, '');
 const SESSION_KEY = 'unimart_active_session_user_v1';
@@ -105,13 +106,11 @@ export const authApi = {
         throw new Error(errJson.error || 'Invalid email or password. Please check your Chitkara credentials.');
       }
     } catch (networkErr) {
-      // If error was 401 invalid credentials, rethrow immediately
       if (networkErr.message && networkErr.message.includes('Invalid email or password')) {
         throw networkErr;
       }
-      // In production mode, reject fallback authentication
-      if (IS_PROD_AUTH) {
-        throw new Error('Authentication backend unreachable. Local demo authentication is disabled in production mode.');
+      if (isIntegratedMode() || IS_PROD_AUTH) {
+        throw new Error(`Cannot connect to Uni-Gram Java server (${API_BASE_URL}). Please verify the backend is running on port 8080 (or switch to OFFLINE DEMO mode). Error: ${networkErr.message}`);
       }
       // Otherwise network/server offline in demo mode: fall through to isolated demo mode
     }
@@ -176,11 +175,11 @@ export const authApi = {
         if (errJson.error) throw new Error(errJson.error);
       }
     } catch (networkErr) {
-      if (networkErr.message && !networkErr.message.includes('Failed to fetch')) {
+      if (networkErr.message && !networkErr.message.includes('Failed to fetch') && !networkErr.message.includes('NetworkError')) {
         throw networkErr;
       }
-      if (IS_PROD_AUTH) {
-        throw new Error('Password reset service unreachable. Local demo OTP is disabled in production mode.');
+      if (isIntegratedMode() || IS_PROD_AUTH) {
+        throw new Error(`Cannot connect to Uni-Gram Java server (${API_BASE_URL}). Please verify the backend is running on port 8080 (or switch to OFFLINE DEMO mode). Error: ${networkErr.message}`);
       }
     }
 
@@ -262,8 +261,8 @@ export const authApi = {
       }
     }
 
-    if (IS_PROD_AUTH) {
-      throw new Error('Google OAuth backend unreachable. Local demo login is disabled in production mode.');
+    if (isIntegratedMode() || IS_PROD_AUTH) {
+      throw new Error(`Google OAuth backend unreachable at ${API_BASE_URL}. Ensure the backend is running on port 8080 (or switch to OFFLINE DEMO mode).`);
     }
 
     // 2. Demo fallback strictly in offline demo mode: role is never escalated
@@ -313,13 +312,13 @@ export const authApi = {
           return { data: null };
         }
       } catch (_netErr) {
-        if (IS_PROD_AUTH) {
-          // Reject fallback in production mode
+        if (isIntegratedMode() || IS_PROD_AUTH) {
+          // Reject fallback in integrated mode
           return { data: null };
         }
       }
-    } else if (IS_PROD_AUTH) {
-      // In production mode, unverified browser storage is NEVER trusted as authenticated user proof
+    } else if (isIntegratedMode() || IS_PROD_AUTH) {
+      // In integrated mode, unverified browser storage is NEVER trusted as authenticated user proof
       return { data: null };
     }
 
@@ -373,11 +372,11 @@ export const authApi = {
         throw new Error(errJson.error || 'Account not found with this email.');
       }
     } catch (networkErr) {
-      if (networkErr.message && !networkErr.message.includes('Failed to fetch')) {
+      if (networkErr.message && !networkErr.message.includes('Failed to fetch') && !networkErr.message.includes('NetworkError')) {
         throw networkErr;
       }
-      if (IS_PROD_AUTH) {
-        throw new Error('Password reset service unreachable. Local demo OTP is disabled in production mode.');
+      if (isIntegratedMode() || IS_PROD_AUTH) {
+        throw new Error(`Cannot connect to Uni-Gram Java server (${API_BASE_URL}). Please verify the backend is running on port 8080 (or switch to OFFLINE DEMO mode). Error: ${networkErr.message}`);
       }
     }
 
@@ -424,11 +423,11 @@ export const authApi = {
         throw new Error(errJson.error || 'Invalid or expired OTP.');
       }
     } catch (networkErr) {
-      if (networkErr.message && !networkErr.message.includes('Failed to fetch')) {
+      if (networkErr.message && !networkErr.message.includes('Failed to fetch') && !networkErr.message.includes('NetworkError')) {
         throw networkErr;
       }
-      if (IS_PROD_AUTH) {
-        throw new Error('Password reset service unreachable. Local demo OTP is disabled in production mode.');
+      if (isIntegratedMode() || IS_PROD_AUTH) {
+        throw new Error(`Cannot connect to Uni-Gram Java server (${API_BASE_URL}). Please verify the backend is running on port 8080 (or switch to OFFLINE DEMO mode). Error: ${networkErr.message}`);
       }
     }
 
@@ -477,11 +476,11 @@ export const authApi = {
         throw new Error(errJson.error || 'Password reset failed.');
       }
     } catch (networkErr) {
-      if (networkErr.message && !networkErr.message.includes('Failed to fetch')) {
+      if (networkErr.message && !networkErr.message.includes('Failed to fetch') && !networkErr.message.includes('NetworkError')) {
         throw networkErr;
       }
-      if (IS_PROD_AUTH) {
-        throw new Error('Password reset service unreachable. Local demo OTP is disabled in production mode.');
+      if (isIntegratedMode() || IS_PROD_AUTH) {
+        throw new Error(`Cannot connect to Uni-Gram Java server (${API_BASE_URL}). Please verify the backend is running on port 8080 (or switch to OFFLINE DEMO mode). Error: ${networkErr.message}`);
       }
     }
 
