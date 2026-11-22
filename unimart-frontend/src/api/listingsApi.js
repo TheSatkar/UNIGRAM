@@ -321,7 +321,7 @@ export const listingsApi = {
         body: payload
       });
       const adapted = adaptServerListing(res.data);
-      const isPending = adapted.status === 'pending';
+      const isPending = adapted.status === 'pending' || Boolean(adapted.hasPendingEdit);
       return {
         data: adapted,
         editType: isPending ? 'pending' : 'price',

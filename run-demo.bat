@@ -63,16 +63,22 @@ echo.
 echo [2/4] Starting Uni-Gram Java HTTP API Server on port 8080...
 start "Uni-Gram Java Backend (Port 8080)" cmd /k ""%JAVA_EXE%" -cp "bin;lib/*" com.unigram.Main --server"
 
-:: 5. Health Check for Backend
+:: 5. Health Check for Backend & Persistence Verification
 echo [3/4] Verifying backend health at http://127.0.0.1:8080/api/health...
 set BACKEND_UP=0
+set MYSQL_CONNECTED=0
 for /l %%i in (1, 1, 15) do (
     if !BACKEND_UP! equ 0 (
-        powershell -NoProfile -Command "try { $r = Invoke-WebRequest -Uri 'http://127.0.0.1:8080/api/health' -UseBasicParsing -TimeoutSec 1; if ($r.StatusCode -eq 200) { exit 0 } else { exit 1 } } catch { exit 1 }"
-        if not errorlevel 1 (
-            set BACKEND_UP=1
-        ) else (
-            timeout /t 1 /nobreak >nul
+        for /f "usebackq delims=" %%s in (`powershell -NoProfile -Command "try { $r = Invoke-RestMethod -Uri 'http://127.0.0.1:8080/api/health' -TimeoutSec 1; if ($r.status -eq 'success') { if ($r.data.database -eq 'CONNECTED') { 'UP_CONNECTED' } else { 'UP_INMEMORY' } } else { 'DOWN' } } catch { 'DOWN' }"`) do (
+            if "%%s"=="UP_CONNECTED" (
+                set BACKEND_UP=1
+                set MYSQL_CONNECTED=1
+            ) else if "%%s"=="UP_INMEMORY" (
+                set BACKEND_UP=1
+                set MYSQL_CONNECTED=0
+            ) else (
+                timeout /t 1 /nobreak >nul
+            )
         )
     )
 )
@@ -83,7 +89,14 @@ if !BACKEND_UP! equ 0 (
     pause
     exit /b 1
 )
-echo [PASS] Java backend is UP and responsive on port 8080.
+echo [PASS] Java backend is UP on port 8080.
+if !MYSQL_CONNECTED! equ 1 (
+    echo [PASS] MySQL Persistence: CONNECTED (Integrated Mode active).
+) else (
+    echo [WARNING] MySQL is NOT connected.
+    echo Running in IN_MEMORY_PERSISTENCE mode (local demo fallback).
+    echo To use MySQL, verify MySQL service and UNIGRAM_DB_* environment variables.
+)
 
 :: 6. Launch Vite Frontend
 echo.
@@ -109,7 +122,15 @@ for /l %%i in (1, 1, 15) do (
     )
 )
 
-:: 8. Open in browser
+if !FRONTEND_UP! equ 0 (
+    echo [ERROR] Frontend failed to respond on http://localhost:5173 within 15 seconds.
+    echo Please check the "UniMart Frontend (Vite)" console window for details.
+    pause
+    exit /b 1
+)
+echo [PASS] Frontend is UP and accessible at http://localhost:5173.
+
+:: 8. Open in browser (only after verifying frontend is UP)
 start http://localhost:5173
 
 echo.
@@ -119,6 +140,11 @@ echo ======================================================================
 echo.
 echo  Frontend URL:     http://localhost:5173
 echo  Backend Health:   http://127.0.0.1:8080/api/health
+if !MYSQL_CONNECTED! equ 1 (
+    echo  Persistence:      INTEGRATED DEMO (MySQL Connected)
+) else (
+    echo  Persistence:      DEMO MODE (MySQL Disconnected - In-Memory)
+)
 echo.
 echo  Demo Accounts for Presentation:
 echo  ------------------------------------------------------------------

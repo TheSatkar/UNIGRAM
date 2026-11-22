@@ -848,35 +848,50 @@ public class ApiRouter implements HttpHandler {
             listing.setPrice(req.getPrice());
         }
 
+        boolean wasApproved = "approved".equalsIgnoreCase(listing.getStatus());
         boolean requiresModeration = !isAdmin && isNonPriceModified;
 
+        if (req.getPrice() != null) {
+            listing.setPrice(req.getPrice());
+        }
+
         if (!requiresModeration) {
-            if (req.getTitle() != null) listing.setTitle(req.getTitle().trim());
-            if (req.getCategoryId() != null) listing.setCategoryId(req.getCategoryId());
-            if (req.getSubcategoryId() != null) listing.setSubcategoryId(req.getSubcategoryId());
-            if (req.getOriginalPrice() != null) listing.setOriginalPrice(req.getOriginalPrice());
-            if (req.getItemCondition() != null) listing.setItemCondition(req.getItemCondition());
-            if (req.getMeetupSpot() != null) listing.setMeetupSpot(req.getMeetupSpot());
-            if (req.getDescription() != null) listing.setDescription(req.getDescription().trim());
-            if (req.getPhotos() != null) listing.setPhotos(req.getPhotos());
+            applyListingUpdates(listing, req);
+            if (req.getPhotos() != null) {
+                listing.setPhotos(req.getPhotos());
+            }
+            listing.setPendingType(null);
+            listing.setPendingEdit(null);
         } else {
-            listing.setStatus("pending");
+            if (!wasApproved) {
+                listing.setStatus("pending");
+            }
             listing.setPendingType("edit");
+            listing.setPendingEdit(body);
         }
         listing.setUpdatedAt(LocalDateTime.now());
 
+        final Listing listingToSave = listing;
         if (!executeTx(exchange, "updating listing", conn -> {
             if (requiresModeration) {
-                listingDao.updateStatus(conn, id, "pending", "edit");
+                if (wasApproved) {
+                    listingDao.updateStatus(conn, id, "approved", "edit");
+                    if (req.getPrice() != null) {
+                        listingDao.update(conn, listingToSave);
+                    }
+                } else {
+                    listingDao.updateStatus(conn, id, "pending", "edit");
+                }
                 listingDao.savePendingEdit(conn, id, body);
             } else {
-                listingDao.update(conn, listing);
+                listingDao.update(conn, listingToSave);
                 if (req.getPhotos() != null) {
                     listingDao.deletePhotosByListingId(conn, id);
                     for (int i = 0; i < req.getPhotos().size(); i++) {
                         listingDao.insertPhoto(conn, id, req.getPhotos().get(i), i);
                     }
                 }
+                listingDao.deletePendingEdit(conn, id);
             }
         })) {
             return;
@@ -888,6 +903,7 @@ public class ApiRouter implements HttpHandler {
             inMemoryStorage.savePendingEdit(id, body);
         } else {
             inMemoryStorage.saveListing(listing);
+            inMemoryStorage.deletePendingEdit(id);
         }
         sendJson(exchange, 200, ApiResponse.ok(listing));
     }
@@ -963,8 +979,9 @@ public class ApiRouter implements HttpHandler {
         if (!executeTx(exchange, "rejecting listing", conn -> {
             Optional<String> pendingEditOpt = listingDao.findPendingEdit(conn, id);
             if (pendingEditOpt.isPresent()) {
-                // Rejecting an edit on an approved listing: delete pending edit only, live listing remains untouched
+                // Rejecting an edit on an approved listing: delete pending edit and clear pending_type; live listing remains untouched
                 listingDao.deletePendingEdit(conn, id);
+                listingDao.updateStatus(conn, id, listing.getStatus(), null);
             } else {
                 // Rejecting a new listing: mark rejected
                 listing.setStatus("rejected");
@@ -978,6 +995,9 @@ public class ApiRouter implements HttpHandler {
 
         if (inMemoryStorage.getPendingEdit(id) != null) {
             inMemoryStorage.deletePendingEdit(id);
+            listing.setPendingType(null);
+            listing.setPendingEdit(null);
+            inMemoryStorage.saveListing(listing);
         } else {
             listing.setStatus("rejected");
             listing.setPendingType(null);

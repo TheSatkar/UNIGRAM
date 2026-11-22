@@ -11,11 +11,9 @@ export default function ChatModal() {
     activeConversation,
     conversations,
     closeChat,
-    toggleMinimize,
     openConversation,
     sendMessage,
     toggleReaction,
-    loading,
     sending,
     apiError
   } = useChat();
