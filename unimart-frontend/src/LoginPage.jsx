@@ -1049,7 +1049,7 @@ export default function LoginPage({
                   <strong>Demo mode:</strong> Your OTP is{' '}
                   <span className="unimart-otp-demo-code">{simulatedOtp}</span>
                   <br />
-                  <span style={{ fontSize: '0.75rem', opacity: 0.8 }}>Configure EmailJS in src/lib/emailService.js to send real emails.</span>
+                  <span style={{ fontSize: '0.75rem', opacity: 0.8 }}>Uni-Gram backend password recovery service.</span>
                 </span>
               </div>
             )}

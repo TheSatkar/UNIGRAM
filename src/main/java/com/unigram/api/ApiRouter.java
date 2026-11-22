@@ -498,27 +498,8 @@ public class ApiRouter implements HttpHandler {
             user = new User(userId, name, email, role, email.split("@")[0].toUpperCase(), "");
 
             inMemoryChatService.registerUser(user);
-            if (isDatabaseAvailable()) {
-                try (Connection conn = DatabaseConnectionFactory.getConnection(config)) {
-                    conn.setAutoCommit(false);
-                    try {
-                        userDao.insert(conn, user);
-                        conn.commit();
-                    } catch (Exception e) {
-                        conn.rollback();
-                        if (isProductionMode() || isDurableWriteRequired(exchange)) {
-                            sendJson(exchange, 500, ApiResponse.error("Database failure registering Google user: " + e.getMessage()));
-                            return;
-                        }
-                    }
-                } catch (SQLException | DatabaseException e) {
-                    if (isProductionMode() || isDurableWriteRequired(exchange)) {
-                        sendJson(exchange, 500, ApiResponse.error("Database connection failure: " + e.getMessage()));
-                        return;
-                    }
-                }
-            } else if (isProductionMode() || isDurableWriteRequired(exchange)) {
-                sendJson(exchange, 503, ApiResponse.error("Durable database write failed: MySQL database is unavailable."));
+            final User userToInsert = user;
+            if (!executeTx(exchange, "registering Google user", conn -> userDao.insert(conn, userToInsert))) {
                 return;
             }
         }
@@ -772,37 +753,30 @@ public class ApiRouter implements HttpHandler {
         listing.setPendingType("admin".equalsIgnoreCase(session.getRole()) ? null : "new");
         listing.setPhotos(req.getPhotos() != null ? req.getPhotos() : new ArrayList<>());
 
-        if (isDatabaseAvailable()) {
-            try (Connection conn = DatabaseConnectionFactory.getConnection(config)) {
-                conn.setAutoCommit(false);
-                try {
-                    long dbId = listingDao.insert(conn, listing);
-                    listing.setId(dbId);
-                    if (req.getPhotos() != null) {
-                        for (int i = 0; i < req.getPhotos().size(); i++) {
-                            listingDao.insertPhoto(conn, dbId, req.getPhotos().get(i), i);
-                        }
-                    }
-                    productDao.insert(conn, new ProductReference(String.valueOf(dbId), listing.getTitle()));
-                    conn.commit();
+        if (checkDurableWrite(exchange)) {
+            return;
+        }
 
-                    // Only after successful database commit, cache in memory using the EXACT same dbId
-                    inMemoryStorage.saveListing(listing);
-                    ProductReference ref = new ProductReference(String.valueOf(dbId), listing.getTitle());
-                    inMemoryChatService.registerProduct(ref);
-                } catch (SQLException e) {
-                    conn.rollback();
-                    sendJson(exchange, 500, ApiResponse.error("Database error creating listing: " + e.getMessage()));
-                    return;
-                } finally {
-                    conn.setAutoCommit(true);
+        final Listing listingToSave = listing;
+        boolean txOk = executeTx(exchange, "creating listing", conn -> {
+            long dbId = listingDao.insert(conn, listingToSave);
+            listingToSave.setId(dbId);
+            if (req.getPhotos() != null) {
+                for (int i = 0; i < req.getPhotos().size(); i++) {
+                    listingDao.insertPhoto(conn, dbId, req.getPhotos().get(i), i);
                 }
-            } catch (SQLException | DatabaseException e) {
-                sendJson(exchange, 500, ApiResponse.error("Database connection failure: " + e.getMessage()));
-                return;
             }
+            productDao.insert(conn, new ProductReference(String.valueOf(dbId), listingToSave.getTitle()));
+        });
+        if (!txOk) {
+            return;
+        }
+
+        if (isDatabaseAvailable()) {
+            inMemoryStorage.saveListing(listing);
+            ProductReference ref = new ProductReference(String.valueOf(listing.getId()), listing.getTitle());
+            inMemoryChatService.registerProduct(ref);
         } else {
-            // Pure in-memory mode (when MySQL is unconfigured or unavailable)
             long id = inMemoryStorage.saveListing(listing);
             listing.setId(id);
             ProductReference ref = new ProductReference(String.valueOf(id), listing.getTitle());
@@ -891,34 +865,20 @@ public class ApiRouter implements HttpHandler {
         }
         listing.setUpdatedAt(LocalDateTime.now());
 
-        if (isDatabaseAvailable()) {
-            try (Connection conn = DatabaseConnectionFactory.getConnection(config)) {
-                conn.setAutoCommit(false);
-                try {
-                    if (requiresModeration) {
-                        listingDao.updateStatus(conn, id, "pending", "edit");
-                        listingDao.savePendingEdit(conn, id, body);
-                    } else {
-                        listingDao.update(conn, listing);
-                        if (req.getPhotos() != null) {
-                            listingDao.deletePhotosByListingId(conn, id);
-                            for (int i = 0; i < req.getPhotos().size(); i++) {
-                                listingDao.insertPhoto(conn, id, req.getPhotos().get(i), i);
-                            }
-                        }
+        if (!executeTx(exchange, "updating listing", conn -> {
+            if (requiresModeration) {
+                listingDao.updateStatus(conn, id, "pending", "edit");
+                listingDao.savePendingEdit(conn, id, body);
+            } else {
+                listingDao.update(conn, listing);
+                if (req.getPhotos() != null) {
+                    listingDao.deletePhotosByListingId(conn, id);
+                    for (int i = 0; i < req.getPhotos().size(); i++) {
+                        listingDao.insertPhoto(conn, id, req.getPhotos().get(i), i);
                     }
-                    conn.commit();
-                } catch (Exception e) {
-                    conn.rollback();
-                    sendJson(exchange, 500, ApiResponse.error("Database error updating listing: " + e.getMessage()));
-                    return;
                 }
-            } catch (SQLException | DatabaseException e) {
-                sendJson(exchange, 500, ApiResponse.error("Database connection failure: " + e.getMessage()));
-                return;
             }
-        } else if (isProductionMode() || isDurableWriteRequired(exchange)) {
-            sendJson(exchange, 503, ApiResponse.error("Durable database write failed: MySQL database is unavailable. Writes are rejected to maintain strict persistence integrity."));
+        })) {
             return;
         }
 
@@ -933,8 +893,7 @@ public class ApiRouter implements HttpHandler {
     }
 
     private void handleListingApprove(HttpExchange exchange, long id) throws IOException {
-        if (isDurableWriteRequired(exchange) && !isDatabaseAvailable()) {
-            sendJson(exchange, 503, ApiResponse.error("Durable database write failed: MySQL database is unavailable. Writes are rejected to maintain strict persistence integrity."));
+        if (checkDurableWrite(exchange)) {
             return;
         }
 
@@ -950,50 +909,28 @@ public class ApiRouter implements HttpHandler {
             return;
         }
 
-        if (isDatabaseAvailable()) {
-            try (Connection conn = DatabaseConnectionFactory.getConnection(config)) {
-                conn.setAutoCommit(false);
-                try {
-                    Optional<String> pendingEditOpt = listingDao.findPendingEdit(conn, id);
-                    if (pendingEditOpt.isPresent()) {
-                        CreateListingRequest proposed = JsonUtil.fromJson(pendingEditOpt.get(), CreateListingRequest.class);
-                        if (proposed != null) {
-                            if (proposed.getTitle() != null) listing.setTitle(proposed.getTitle().trim());
-                            if (proposed.getCategoryId() != null) listing.setCategoryId(proposed.getCategoryId());
-                            if (proposed.getSubcategoryId() != null) listing.setSubcategoryId(proposed.getSubcategoryId());
-                            if (proposed.getPrice() != null) listing.setPrice(proposed.getPrice());
-                            if (proposed.getOriginalPrice() != null) listing.setOriginalPrice(proposed.getOriginalPrice());
-                            if (proposed.getItemCondition() != null) listing.setItemCondition(proposed.getItemCondition());
-                            if (proposed.getMeetupSpot() != null) listing.setMeetupSpot(proposed.getMeetupSpot());
-                            if (proposed.getDescription() != null) listing.setDescription(proposed.getDescription().trim());
-                            listing.setHasNotes(proposed.isHasNotes());
-                            if (proposed.getPhotos() != null) {
-                                listingDao.deletePhotosByListingId(conn, id);
-                                for (int i = 0; i < proposed.getPhotos().size(); i++) {
-                                    listingDao.insertPhoto(conn, id, proposed.getPhotos().get(i), i);
-                                }
-                                listing.setPhotos(proposed.getPhotos());
-                            }
-                            listingDao.update(conn, listing);
+        if (!executeTx(exchange, "approving listing", conn -> {
+            Optional<String> pendingEditOpt = listingDao.findPendingEdit(conn, id);
+            if (pendingEditOpt.isPresent()) {
+                CreateListingRequest proposed = JsonUtil.fromJson(pendingEditOpt.get(), CreateListingRequest.class);
+                if (proposed != null) {
+                    applyListingUpdates(listing, proposed);
+                    if (proposed.getPhotos() != null) {
+                        listingDao.deletePhotosByListingId(conn, id);
+                        for (int i = 0; i < proposed.getPhotos().size(); i++) {
+                            listingDao.insertPhoto(conn, id, proposed.getPhotos().get(i), i);
                         }
-                        listingDao.deletePendingEdit(conn, id);
+                        listing.setPhotos(proposed.getPhotos());
                     }
-                    listing.setStatus("approved");
-                    listing.setPendingType(null);
-                    listing.setUpdatedAt(LocalDateTime.now());
-                    listingDao.updateStatus(conn, id, "approved", null);
-                    conn.commit();
-                } catch (Exception e) {
-                    conn.rollback();
-                    sendJson(exchange, 500, ApiResponse.error("Database error approving listing: " + e.getMessage()));
-                    return;
+                    listingDao.update(conn, listing);
                 }
-            } catch (SQLException | DatabaseException e) {
-                sendJson(exchange, 500, ApiResponse.error("Database connection failure: " + e.getMessage()));
-                return;
+                listingDao.deletePendingEdit(conn, id);
             }
-        } else if (isProductionMode() || isDurableWriteRequired(exchange)) {
-            sendJson(exchange, 503, ApiResponse.error("Durable database write failed: MySQL database is unavailable."));
+            listing.setStatus("approved");
+            listing.setPendingType(null);
+            listing.setUpdatedAt(LocalDateTime.now());
+            listingDao.updateStatus(conn, id, "approved", null);
+        })) {
             return;
         }
 
@@ -1007,8 +944,7 @@ public class ApiRouter implements HttpHandler {
     }
 
     private void handleListingReject(HttpExchange exchange, long id) throws IOException {
-        if (isDurableWriteRequired(exchange) && !isDatabaseAvailable()) {
-            sendJson(exchange, 503, ApiResponse.error("Durable database write failed: MySQL database is unavailable. Writes are rejected to maintain strict persistence integrity."));
+        if (checkDurableWrite(exchange)) {
             return;
         }
 
@@ -1024,33 +960,19 @@ public class ApiRouter implements HttpHandler {
             return;
         }
 
-        if (isDatabaseAvailable()) {
-            try (Connection conn = DatabaseConnectionFactory.getConnection(config)) {
-                conn.setAutoCommit(false);
-                try {
-                    Optional<String> pendingEditOpt = listingDao.findPendingEdit(conn, id);
-                    if (pendingEditOpt.isPresent()) {
-                        // Rejecting an edit on an approved listing: delete pending edit only, live listing remains untouched
-                        listingDao.deletePendingEdit(conn, id);
-                    } else {
-                        // Rejecting a new listing: mark rejected
-                        listing.setStatus("rejected");
-                        listing.setPendingType(null);
-                        listing.setUpdatedAt(LocalDateTime.now());
-                        listingDao.updateStatus(conn, id, "rejected", null);
-                    }
-                    conn.commit();
-                } catch (Exception e) {
-                    conn.rollback();
-                    sendJson(exchange, 500, ApiResponse.error("Database error rejecting listing: " + e.getMessage()));
-                    return;
-                }
-            } catch (SQLException | DatabaseException e) {
-                sendJson(exchange, 500, ApiResponse.error("Database connection failure: " + e.getMessage()));
-                return;
+        if (!executeTx(exchange, "rejecting listing", conn -> {
+            Optional<String> pendingEditOpt = listingDao.findPendingEdit(conn, id);
+            if (pendingEditOpt.isPresent()) {
+                // Rejecting an edit on an approved listing: delete pending edit only, live listing remains untouched
+                listingDao.deletePendingEdit(conn, id);
+            } else {
+                // Rejecting a new listing: mark rejected
+                listing.setStatus("rejected");
+                listing.setPendingType(null);
+                listing.setUpdatedAt(LocalDateTime.now());
+                listingDao.updateStatus(conn, id, "rejected", null);
             }
-        } else if (isProductionMode() || isDurableWriteRequired(exchange)) {
-            sendJson(exchange, 503, ApiResponse.error("Durable database write failed: MySQL database is unavailable."));
+        })) {
             return;
         }
 
@@ -1067,8 +989,7 @@ public class ApiRouter implements HttpHandler {
     }
 
     private void handleListingMarkSold(HttpExchange exchange, long id) throws IOException {
-        if (isDurableWriteRequired(exchange) && !isDatabaseAvailable()) {
-            sendJson(exchange, 503, ApiResponse.error("Durable database write failed: MySQL database is unavailable. Writes are rejected to maintain strict persistence integrity."));
+        if (checkDurableWrite(exchange)) {
             return;
         }
 
@@ -1092,23 +1013,7 @@ public class ApiRouter implements HttpHandler {
         listing.setStatus("sold");
         listing.setUpdatedAt(LocalDateTime.now());
 
-        if (isDatabaseAvailable()) {
-            try (Connection conn = DatabaseConnectionFactory.getConnection(config)) {
-                conn.setAutoCommit(false);
-                try {
-                    listingDao.updateStatus(conn, id, "sold", null);
-                    conn.commit();
-                } catch (Exception e) {
-                    conn.rollback();
-                    sendJson(exchange, 500, ApiResponse.error("Database error marking listing sold: " + e.getMessage()));
-                    return;
-                }
-            } catch (SQLException | DatabaseException e) {
-                sendJson(exchange, 500, ApiResponse.error("Database connection failure: " + e.getMessage()));
-                return;
-            }
-        } else if (isProductionMode() || isDurableWriteRequired(exchange)) {
-            sendJson(exchange, 503, ApiResponse.error("Durable database write failed: MySQL database is unavailable."));
+        if (!executeTx(exchange, "marking listing sold", conn -> listingDao.updateStatus(conn, id, "sold", null))) {
             return;
         }
 
@@ -1117,8 +1022,7 @@ public class ApiRouter implements HttpHandler {
     }
 
     private void handleListingDelete(HttpExchange exchange, long id) throws IOException {
-        if (isDurableWriteRequired(exchange) && !isDatabaseAvailable()) {
-            sendJson(exchange, 503, ApiResponse.error("Durable database write failed: MySQL database is unavailable. Writes are rejected to maintain strict persistence integrity."));
+        if (checkDurableWrite(exchange)) {
             return;
         }
 
@@ -1139,25 +1043,11 @@ public class ApiRouter implements HttpHandler {
             return;
         }
 
-        if (isDatabaseAvailable()) {
-            try (Connection conn = DatabaseConnectionFactory.getConnection(config)) {
-                conn.setAutoCommit(false);
-                try {
-                    listingDao.deletePhotosByListingId(conn, id);
-                    listingDao.deletePendingEdit(conn, id);
-                    listingDao.delete(conn, id);
-                    conn.commit();
-                } catch (Exception e) {
-                    conn.rollback();
-                    sendJson(exchange, 500, ApiResponse.error("Database error deleting listing: " + e.getMessage()));
-                    return;
-                }
-            } catch (SQLException | DatabaseException e) {
-                sendJson(exchange, 500, ApiResponse.error("Database connection failure: " + e.getMessage()));
-                return;
-            }
-        } else if (isProductionMode() || isDurableWriteRequired(exchange)) {
-            sendJson(exchange, 503, ApiResponse.error("Durable database write failed: MySQL database is unavailable."));
+        if (!executeTx(exchange, "deleting listing", conn -> {
+            listingDao.deletePhotosByListingId(conn, id);
+            listingDao.deletePendingEdit(conn, id);
+            listingDao.delete(conn, id);
+        })) {
             return;
         }
 
@@ -1188,8 +1078,7 @@ public class ApiRouter implements HttpHandler {
                         .toList();
                 sendJson(exchange, 200, ApiResponse.ok(Map.of("listingIds", listingIds, "data", items)));
             } else if ("POST".equals(method)) {
-                if (isDurableWriteRequired(exchange) && !isDatabaseAvailable()) {
-                    sendJson(exchange, 503, ApiResponse.error("Durable database write failed: MySQL database is unavailable. Writes are rejected to maintain strict persistence integrity."));
+                if (checkDurableWrite(exchange)) {
                     return;
                 }
                 String body = JsonUtil.readRequestBody(exchange, JsonUtil.DEFAULT_MAX_BODY_BYTES);
@@ -1200,23 +1089,7 @@ public class ApiRouter implements HttpHandler {
                 }
                 long lid = req.getListingId();
 
-                if (isDatabaseAvailable()) {
-                    try (Connection conn = DatabaseConnectionFactory.getConnection(config)) {
-                        conn.setAutoCommit(false);
-                        try {
-                            wishlistDao.add(conn, userId, lid);
-                            conn.commit();
-                        } catch (Exception e) {
-                            conn.rollback();
-                            sendJson(exchange, 500, ApiResponse.error("Database error adding to wishlist: " + e.getMessage()));
-                            return;
-                        }
-                    } catch (SQLException | DatabaseException e) {
-                        sendJson(exchange, 500, ApiResponse.error("Database connection failure: " + e.getMessage()));
-                        return;
-                    }
-                } else if (isProductionMode() || isDurableWriteRequired(exchange)) {
-                    sendJson(exchange, 503, ApiResponse.error("Durable database write failed: MySQL database is unavailable."));
+                if (!executeTx(exchange, "adding to wishlist", conn -> wishlistDao.add(conn, userId, lid))) {
                     return;
                 }
 
@@ -1226,35 +1099,17 @@ public class ApiRouter implements HttpHandler {
                 sendMethodNotAllowed(exchange, "GET, POST, OPTIONS");
             }
         } else if (path.startsWith("/api/wishlist/") && "DELETE".equals(method)) {
-            if (isDurableWriteRequired(exchange) && !isDatabaseAvailable()) {
-                sendJson(exchange, 503, ApiResponse.error("Durable database write failed: MySQL database is unavailable. Writes are rejected to maintain strict persistence integrity."));
+            if (checkDurableWrite(exchange)) {
                 return;
             }
             String lidStr = path.substring("/api/wishlist/".length());
             long lid = parseLongSafe(lidStr);
 
-            if (isDatabaseAvailable()) {
-                try (Connection conn = DatabaseConnectionFactory.getConnection(config)) {
-                    conn.setAutoCommit(false);
-                    try {
-                        wishlistDao.remove(conn, userId, lid);
-                        conn.commit();
-                    } catch (Exception e) {
-                        conn.rollback();
-                        sendJson(exchange, 500, ApiResponse.error("Database error removing from wishlist: " + e.getMessage()));
-                        return;
-                    }
-                } catch (SQLException | DatabaseException e) {
-                    sendJson(exchange, 500, ApiResponse.error("Database connection failure: " + e.getMessage()));
-                    return;
-                }
-            } else if (isProductionMode() || isDurableWriteRequired(exchange)) {
-                sendJson(exchange, 503, ApiResponse.error("Durable database write failed: MySQL database is unavailable."));
+            if (!executeTx(exchange, "removing from wishlist", conn -> wishlistDao.remove(conn, userId, lid))) {
                 return;
             }
 
             inMemoryStorage.removeFromWishlist(userId, lid);
-            sendJson(exchange, 200, ApiResponse.ok(Map.of("success", true, "listingId", lid)));
             sendJson(exchange, 200, ApiResponse.ok(Map.of("success", true, "listingId", lid)));
         } else {
             sendMethodNotAllowed(exchange, "GET, POST, DELETE, OPTIONS");
@@ -1873,5 +1728,56 @@ public class ApiRouter implements HttpHandler {
         } catch (Exception e) {
             return -1;
         }
+    }
+
+    @FunctionalInterface
+    private interface DatabaseTxConsumer {
+        void execute(Connection conn) throws Exception;
+    }
+
+    private boolean checkDurableWrite(HttpExchange exchange) throws IOException {
+        if ((isProductionMode() || isDurableWriteRequired(exchange)) && !isDatabaseAvailable()) {
+            sendJson(exchange, 503, ApiResponse.error("Durable database write failed: MySQL database is unavailable. Writes are rejected to maintain strict persistence integrity."));
+            return true;
+        }
+        return false;
+    }
+
+    private boolean executeTx(HttpExchange exchange, String actionDesc, DatabaseTxConsumer action) throws IOException {
+        if (isDatabaseAvailable()) {
+            try (Connection conn = DatabaseConnectionFactory.getConnection(config)) {
+                conn.setAutoCommit(false);
+                try {
+                    action.execute(conn);
+                    conn.commit();
+                    return true;
+                } catch (Exception e) {
+                    try {
+                        conn.rollback();
+                    } catch (SQLException ignored) {}
+                    sendJson(exchange, 500, ApiResponse.error("Database error " + actionDesc + ": " + e.getMessage()));
+                    return false;
+                }
+            } catch (SQLException | DatabaseException e) {
+                sendJson(exchange, 500, ApiResponse.error("Database connection failure: " + e.getMessage()));
+                return false;
+            }
+        } else if (isProductionMode() || isDurableWriteRequired(exchange)) {
+            sendJson(exchange, 503, ApiResponse.error("Durable database write failed: MySQL database is unavailable. Writes are rejected to maintain strict persistence integrity."));
+            return false;
+        }
+        return true;
+    }
+
+    private void applyListingUpdates(Listing listing, CreateListingRequest proposed) {
+        if (proposed.getTitle() != null) listing.setTitle(proposed.getTitle().trim());
+        if (proposed.getCategoryId() != null) listing.setCategoryId(proposed.getCategoryId());
+        if (proposed.getSubcategoryId() != null) listing.setSubcategoryId(proposed.getSubcategoryId());
+        if (proposed.getPrice() != null) listing.setPrice(proposed.getPrice());
+        if (proposed.getOriginalPrice() != null) listing.setOriginalPrice(proposed.getOriginalPrice());
+        if (proposed.getItemCondition() != null) listing.setItemCondition(proposed.getItemCondition());
+        if (proposed.getMeetupSpot() != null) listing.setMeetupSpot(proposed.getMeetupSpot());
+        if (proposed.getDescription() != null) listing.setDescription(proposed.getDescription().trim());
+        listing.setHasNotes(proposed.isHasNotes());
     }
 }

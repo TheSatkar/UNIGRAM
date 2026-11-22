@@ -17,58 +17,8 @@
 
 import { getTable, setTable, delay } from './db.js';
 import { categories } from '../lib/categories.js';
-import { authApi } from './authApi.js';
 import { isIntegratedMode } from '../lib/appMode.js';
-
-const API_BASE_URL = (import.meta.env.VITE_UNIGRAM_API_BASE_URL || 'http://127.0.0.1:8080').replace(/\/+$/, '');
-const IS_PROD_MODE = Boolean(
-  import.meta.env.PROD ||
-  import.meta.env.VITE_APP_MODE === 'production' ||
-  import.meta.env.VITE_ENFORCE_PROD_AUTH === 'true'
-);
-
-async function requestBackend(endpoint, options = {}) {
-  const url = `${API_BASE_URL}${endpoint}`;
-  const headers = {
-    'Accept': 'application/json',
-    ...(options.headers || {})
-  };
-
-  const token = authApi.getToken();
-  if (token && !headers['Authorization']) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
-
-  if (IS_PROD_MODE && !headers['X-Require-Durable']) {
-    headers['X-Require-Durable'] = 'true';
-  }
-
-  if (options.body && typeof options.body === 'object') {
-    headers['Content-Type'] = 'application/json';
-    options.body = JSON.stringify(options.body);
-  }
-
-  const res = await fetch(url, { ...options, headers });
-  let json = null;
-  const contentType = res.headers.get('content-type') || '';
-  if (contentType.includes('application/json')) {
-    try {
-      json = await res.json();
-    } catch (_e) {
-      json = null;
-    }
-  }
-
-  if (!res.ok) {
-    const errorMsg = json?.error || `HTTP ${res.status}: ${res.statusText}`;
-    const err = new Error(errorMsg);
-    err.status = res.status;
-    err.data = json?.data || null;
-    throw err;
-  }
-
-  return json;
-}
+import { apiRequest } from './apiClient.js';
 
 export function adaptServerListing(item) {
   if (!item) return null;
@@ -183,20 +133,15 @@ export const listingsApi = {
    */
   async getListings({ category_id, search, seller_id, currentUser } = {}) {
     if (isIntegratedMode()) {
-      try {
-        const qParams = new URLSearchParams();
-        if (category_id && category_id !== 'All') qParams.set('category_id', category_id);
-        if (seller_id) qParams.set('seller_id', seller_id);
-        if (search && search.trim()) qParams.set('search', search.trim());
+      const qParams = new URLSearchParams();
+      if (category_id && category_id !== 'All') qParams.set('category_id', category_id);
+      if (seller_id) qParams.set('seller_id', seller_id);
+      if (search && search.trim()) qParams.set('search', search.trim());
 
-        const queryStr = qParams.toString() ? `?${qParams.toString()}` : '';
-        const res = await requestBackend(`/api/listings${queryStr}`, { method: 'GET' });
-        const rawListings = res.data || [];
-        const adapted = rawListings.map(adaptServerListing);
-        return { data: adapted };
-      } catch (err) {
-        throw new Error(`Cannot connect to Uni-Gram Java server (${API_BASE_URL}). Ensure the backend is running on port 8080 (or switch to OFFLINE DEMO mode). Error: ${err.message}`);
-      }
+      const queryStr = qParams.toString() ? `?${qParams.toString()}` : '';
+      const res = await apiRequest(`/api/listings${queryStr}`, { method: 'GET' });
+      const rawListings = res.data || [];
+      return { data: rawListings.map(adaptServerListing) };
     }
 
     // 2. Demo fallback (only in explicit OFFLINE mode)
@@ -245,7 +190,7 @@ export const listingsApi = {
    */
   async getListingById(id, currentUser) {
     if (isIntegratedMode()) {
-      const res = await requestBackend(`/api/listings/${id}`, { method: 'GET' });
+      const res = await apiRequest(`/api/listings/${id}`, { method: 'GET' });
       return { data: adaptServerListing(res.data) };
     }
 
@@ -291,7 +236,7 @@ export const listingsApi = {
     };
 
     if (isIntegratedMode()) {
-      const res = await requestBackend('/api/listings', {
+      const res = await apiRequest('/api/listings', {
         method: 'POST',
         body: payload
       });
@@ -371,7 +316,7 @@ export const listingsApi = {
     };
 
     if (isIntegratedMode()) {
-      const res = await requestBackend(`/api/listings/${id}`, {
+      const res = await apiRequest(`/api/listings/${id}`, {
         method: 'PUT',
         body: payload
       });
@@ -411,11 +356,9 @@ export const listingsApi = {
    * Approve listing (Admin only)
    * The Java server authorizes the operation from the verified session token.
    */
-  async approveListing(id, currentUser) {
+  async approveListing(id) {
     if (isIntegratedMode()) {
-      const res = await requestBackend(`/api/listings/${id}/approve`, {
-        method: 'POST'
-      });
+      const res = await apiRequest(`/api/listings/${id}/approve`, { method: 'POST' });
       return {
         data: adaptServerListing(res.data),
         message: `Listing "${res.data.title}" approved!`
@@ -443,11 +386,9 @@ export const listingsApi = {
    * Reject listing (Admin only)
    * The Java server authorizes the operation from the verified session token.
    */
-  async rejectListing(id, currentUser) {
+  async rejectListing(id) {
     if (isIntegratedMode()) {
-      const res = await requestBackend(`/api/listings/${id}/reject`, {
-        method: 'POST'
-      });
+      const res = await apiRequest(`/api/listings/${id}/reject`, { method: 'POST' });
       return {
         data: adaptServerListing(res.data),
         message: `Listing "${res.data.title}" marked as rejected.`
@@ -474,11 +415,9 @@ export const listingsApi = {
   /**
    * Delete listing (Owner or Admin)
    */
-  async deleteListing(id, currentUser) {
+  async deleteListing(id) {
     if (isIntegratedMode()) {
-      await requestBackend(`/api/listings/${id}`, {
-        method: 'DELETE'
-      });
+      await apiRequest(`/api/listings/${id}`, { method: 'DELETE' });
       return { success: true, message: 'Listing deleted.' };
     }
 

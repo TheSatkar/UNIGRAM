@@ -7,9 +7,7 @@
  * Configurable via Vite environment variable: VITE_UNIGRAM_API_BASE_URL
  */
 
-import { authApi } from '../api/authApi.js';
-
-const API_BASE_URL = (import.meta.env.VITE_UNIGRAM_API_BASE_URL || 'http://127.0.0.1:8080').replace(/\/+$/, '');
+import { apiRequest, API_BASE_URL } from '../api/apiClient.js';
 
 class UnigramApiError extends Error {
   constructor(message, status = 500, data = null) {
@@ -20,54 +18,12 @@ class UnigramApiError extends Error {
   }
 }
 
-/**
- * Common fetch helper handling JSON request/response envelopes,
- * status codes, and network error sanitization.
- */
 async function request(endpoint, options = {}) {
-  const url = `${API_BASE_URL}${endpoint}`;
-  const headers = {
-    'Accept': 'application/json',
-    ...(options.headers || {})
-  };
-
-  const token = authApi.getToken();
-  if (token && !headers['Authorization']) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
-
-  if (options.body && typeof options.body === 'object') {
-    headers['Content-Type'] = 'application/json';
-    options.body = JSON.stringify(options.body);
-  }
-
-  let response;
   try {
-    response = await fetch(url, { ...options, headers });
-  } catch (netErr) {
-    throw new UnigramApiError(
-      `Cannot connect to Uni-Gram Java API at ${API_BASE_URL}. Ensure the Java server is running on Option 15.`,
-      0,
-      null
-    );
+    return await apiRequest(endpoint, options);
+  } catch (err) {
+    throw new UnigramApiError(err.message, err.status || 500, err.data || null);
   }
-
-  let json = null;
-  const contentType = response.headers.get('content-type') || '';
-  if (contentType.includes('application/json')) {
-    try {
-      json = await response.json();
-    } catch (_e) {
-      json = null;
-    }
-  }
-
-  if (!response.ok) {
-    const errorMsg = json?.error || `HTTP ${response.status}: ${response.statusText}`;
-    throw new UnigramApiError(errorMsg, response.status, json?.data || null);
-  }
-
-  return json;
 }
 
 export const unigramApi = {

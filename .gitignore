@@ -6,6 +6,7 @@
 
 # Package Files
 *.jar
+!lib/*.jar
 *.war
 *.nar
 *.ear
@@ -49,9 +50,7 @@ desktop.ini
 *.mv.db
 *.trace.db
 
-# Local libraries and credentials
-/lib/
-!unimart-frontend/src/lib/
+# Credentials and env files
 *.env
 .env
 

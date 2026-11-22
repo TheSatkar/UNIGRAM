@@ -8,58 +8,8 @@
 
 import { getTable, setTable, delay } from './db.js';
 import { listingsApi, adaptServerListing } from './listingsApi.js';
-import { authApi } from './authApi.js';
 import { isIntegratedMode } from '../lib/appMode.js';
-
-const API_BASE_URL = (import.meta.env.VITE_UNIGRAM_API_BASE_URL || 'http://127.0.0.1:8080').replace(/\/+$/, '');
-const IS_PROD_MODE = Boolean(
-  import.meta.env.PROD ||
-  import.meta.env.VITE_APP_MODE === 'production' ||
-  import.meta.env.VITE_ENFORCE_PROD_AUTH === 'true'
-);
-
-async function requestWishlist(endpoint, options = {}) {
-  const url = `${API_BASE_URL}${endpoint}`;
-  const headers = {
-    'Accept': 'application/json',
-    ...(options.headers || {})
-  };
-
-  const token = authApi.getToken();
-  if (token && !headers['Authorization']) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
-
-  if (IS_PROD_MODE && !headers['X-Require-Durable']) {
-    headers['X-Require-Durable'] = 'true';
-  }
-
-  if (options.body && typeof options.body === 'object') {
-    headers['Content-Type'] = 'application/json';
-    options.body = JSON.stringify(options.body);
-  }
-
-  const res = await fetch(url, { ...options, headers });
-  let json = null;
-  const contentType = res.headers.get('content-type') || '';
-  if (contentType.includes('application/json')) {
-    try {
-      json = await res.json();
-    } catch (_e) {
-      json = null;
-    }
-  }
-
-  if (!res.ok) {
-    const errorMsg = json?.error || `HTTP ${res.status}: ${res.statusText}`;
-    const err = new Error(errorMsg);
-    err.status = res.status;
-    err.data = json?.data || null;
-    throw err;
-  }
-
-  return json;
-}
+import { apiRequest } from './apiClient.js';
 
 export const wishlistApi = {
   /**
@@ -71,7 +21,7 @@ export const wishlistApi = {
     }
 
     if (isIntegratedMode()) {
-      const res = await requestWishlist('/api/wishlist', { method: 'GET' });
+      const res = await apiRequest('/api/wishlist', { method: 'GET' });
       const payload = res.data || {};
       const rawItems = payload.data || [];
       const listingIds = payload.listingIds || [];
@@ -108,7 +58,7 @@ export const wishlistApi = {
     }
 
     if (isIntegratedMode()) {
-      await requestWishlist('/api/wishlist', {
+      await apiRequest('/api/wishlist', {
         method: 'POST',
         body: { listingId: Number(listingId) }
       });
@@ -143,9 +93,7 @@ export const wishlistApi = {
     }
 
     if (isIntegratedMode()) {
-      await requestWishlist(`/api/wishlist/${listingId}`, {
-        method: 'DELETE'
-      });
+      await apiRequest(`/api/wishlist/${listingId}`, { method: 'DELETE' });
       return { success: true, message: 'Removed from wishlist.' };
     }
 
