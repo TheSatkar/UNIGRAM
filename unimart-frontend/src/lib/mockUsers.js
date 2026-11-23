@@ -28,6 +28,96 @@ export const SEEDED_USERS = [
     studentId: '2110990697',
     department: 'Mathematics',
     role: 'student'
+  },
+  {
+    id: 'student_c',
+    email: 'nisha.r@chitkara.edu.in',
+    password: 'student123',
+    name: 'Nisha R.',
+    studentId: '2110990698',
+    department: 'Fine Arts',
+    role: 'student'
+  },
+  {
+    id: 'student_d',
+    email: 'madhur.t@chitkara.edu.in',
+    password: 'student123',
+    name: 'Madhur T.',
+    studentId: '2110990699',
+    department: 'Mechanical Engg',
+    role: 'student'
+  },
+  {
+    id: 'student_e',
+    email: 'charlie.w@chitkara.edu.in',
+    password: 'student123',
+    name: 'Charlie W.',
+    studentId: '2110990700',
+    department: 'Biotech Dept',
+    role: 'student'
+  },
+  {
+    id: 'student_f',
+    email: 'simran.d@chitkara.edu.in',
+    password: 'student123',
+    name: 'Simran D.',
+    studentId: '2110990701',
+    department: 'Design & Media',
+    role: 'student'
+  },
+  {
+    id: 'student_g',
+    email: 'harsh.p@chitkara.edu.in',
+    password: 'student123',
+    name: 'Harsh P.',
+    studentId: '2110990702',
+    department: 'Maker Collective',
+    role: 'student'
+  },
+  {
+    id: 'student_h',
+    email: 'aman.v@chitkara.edu.in',
+    password: 'student123',
+    name: 'Aman V.',
+    studentId: '2110990703',
+    department: 'Electronics Engg',
+    role: 'student'
+  },
+  {
+    id: 'student_i',
+    email: 'rohan.s@chitkara.edu.in',
+    password: 'student123',
+    name: 'Rohan S.',
+    studentId: '2110990704',
+    department: 'Sports & Athletics',
+    role: 'student'
+  },
+  {
+    id: 'student_j',
+    email: 'kavya.m@chitkara.edu.in',
+    password: 'student123',
+    name: 'Kavya M.',
+    studentId: '2110990705',
+    department: 'Architecture',
+    role: 'student'
+  },
+  {
+    id: 'student_k',
+    email: 'ananya.g@chitkara.edu.in',
+    password: 'student123',
+    name: 'Ananya G.',
+    studentId: '2110990706',
+    department: 'Computer Science',
+    role: 'student'
+  },
+  {
+    id: 'student_l',
+    email: 'vikram.b@chitkara.edu.in',
+    password: 'student123',
+    name: 'Vikram B.',
+    studentId: '2110990707',
+    department: 'Civil Engg',
+    role: 'student'
   }
 ];
 

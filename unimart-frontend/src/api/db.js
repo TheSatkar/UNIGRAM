@@ -20,7 +20,7 @@ import imgArduinoKit from '../assets/products/arduino_kit.jpg';
 import imgSolidPerfume from '../assets/products/solid_perfume.jpg';
 
 const DB_PREFIX = 'unimart_db_';
-export const DB_VERSION = 'v7';
+export const DB_VERSION = 'v8';
 
 // In-memory fallback if localStorage throws in private / restricted browsing
 const memoryStore = {};
@@ -133,6 +133,56 @@ const SEED_USERS = [
     role: 'student',
     department: 'Maker Collective',
     created_at: new Date('2026-01-25').toISOString()
+  },
+  {
+    id: 'student_h',
+    name: 'Aman V.',
+    email: 'aman.v@chitkara.edu.in',
+    student_id: '2110990703',
+    password_hash: 'student123',
+    role: 'student',
+    department: 'Electronics Engg',
+    created_at: new Date('2026-01-26').toISOString()
+  },
+  {
+    id: 'student_i',
+    name: 'Rohan S.',
+    email: 'rohan.s@chitkara.edu.in',
+    student_id: '2110990704',
+    password_hash: 'student123',
+    role: 'student',
+    department: 'Sports & Athletics',
+    created_at: new Date('2026-01-27').toISOString()
+  },
+  {
+    id: 'student_j',
+    name: 'Kavya M.',
+    email: 'kavya.m@chitkara.edu.in',
+    student_id: '2110990705',
+    password_hash: 'student123',
+    role: 'student',
+    department: 'Architecture',
+    created_at: new Date('2026-01-28').toISOString()
+  },
+  {
+    id: 'student_k',
+    name: 'Ananya G.',
+    email: 'ananya.g@chitkara.edu.in',
+    student_id: '2110990706',
+    password_hash: 'student123',
+    role: 'student',
+    department: 'Computer Science',
+    created_at: new Date('2026-01-29').toISOString()
+  },
+  {
+    id: 'student_l',
+    name: 'Vikram B.',
+    email: 'vikram.b@chitkara.edu.in',
+    student_id: '2110990707',
+    password_hash: 'student123',
+    role: 'student',
+    department: 'Civil Engg',
+    created_at: new Date('2026-01-30').toISOString()
   }
 ];
 
@@ -158,7 +208,7 @@ const SEED_LISTINGS = [
   },
   {
     id: 2,
-    seller_id: 'student_a',
+    seller_id: 'student_c',
     title: 'Discrete Mathematics & Its Applications (Rosen)',
     category_id: 'books-notes',
     subcategory_id: 'engineering-textbooks',
@@ -194,7 +244,7 @@ const SEED_LISTINGS = [
   },
   {
     id: 4,
-    seller_id: 'student_b',
+    seller_id: 'student_e',
     title: 'GATE CS 2026 Solved Papers & Notes',
     category_id: 'books-notes',
     subcategory_id: 'competitive-exam-prep',
@@ -232,7 +282,7 @@ const SEED_LISTINGS = [
   },
   {
     id: 6,
-    seller_id: 'student_a',
+    seller_id: 'student_f',
     title: 'Boat Stone 650 10W Bluetooth Speaker',
     category_id: 'electronics-gadgets',
     subcategory_id: 'audio-earphones-speakers',
@@ -268,7 +318,7 @@ const SEED_LISTINGS = [
   },
   {
     id: 8,
-    seller_id: 'student_b',
+    seller_id: 'student_g',
     title: 'SanDisk Ultra 128GB Dual Drive Type-C',
     category_id: 'electronics-gadgets',
     subcategory_id: 'storage-pendrives-hdds',
@@ -288,7 +338,7 @@ const SEED_LISTINGS = [
   // 3. lab-engineering-gear (2 Satkar, 2 Priya)
   {
     id: 9,
-    seller_id: 'student_a',
+    seller_id: 'student_d',
     title: 'Arduino Uno R3 Starter Kit with 30+ Sensors',
     category_id: 'lab-engineering-gear',
     subcategory_id: 'arduino-robotics-kits',
@@ -306,7 +356,7 @@ const SEED_LISTINGS = [
   },
   {
     id: 10,
-    seller_id: 'student_a',
+    seller_id: 'student_h',
     title: 'Standard Student Lab Coat (Size L, Unisex)',
     category_id: 'lab-engineering-gear',
     subcategory_id: 'lab-coats-safety-gear',
@@ -324,7 +374,7 @@ const SEED_LISTINGS = [
   },
   {
     id: 11,
-    seller_id: 'student_b',
+    seller_id: 'student_d',
     title: 'Casio fx-991EX ClassWiz Scientific Calculator',
     category_id: 'lab-engineering-gear',
     subcategory_id: 'scientific-calculators',
@@ -342,7 +392,7 @@ const SEED_LISTINGS = [
   },
   {
     id: 12,
-    seller_id: 'student_b',
+    seller_id: 'student_d',
     title: 'Omega Mini Drafter & Engineering Drawing Set',
     category_id: 'lab-engineering-gear',
     subcategory_id: 'drafters-drawing-kits',
@@ -362,7 +412,7 @@ const SEED_LISTINGS = [
   // 4. stationery-supplies (2 Satkar, 2 Priya)
   {
     id: 13,
-    seller_id: 'student_a',
+    seller_id: 'student_h',
     title: 'Classmate Spiral Notebook Bundle (Pack of 5)',
     category_id: 'stationery-supplies',
     subcategory_id: 'notebooks-registers',
@@ -380,7 +430,7 @@ const SEED_LISTINGS = [
   },
   {
     id: 14,
-    seller_id: 'student_a',
+    seller_id: 'student_g',
     title: 'Uni-ball Eye Rollerball Pens (Set of 6)',
     category_id: 'stationery-supplies',
     subcategory_id: 'pens-writing',
@@ -398,7 +448,7 @@ const SEED_LISTINGS = [
   },
   {
     id: 15,
-    seller_id: 'student_b',
+    seller_id: 'student_c',
     title: 'Camel Acrylic Color Tubes (12 Shades) + Brushes',
     category_id: 'stationery-supplies',
     subcategory_id: 'art-supplies',
@@ -416,7 +466,7 @@ const SEED_LISTINGS = [
   },
   {
     id: 16,
-    seller_id: 'student_b',
+    seller_id: 'student_f',
     title: 'Expanding Document File Folder (13 Pockets)',
     category_id: 'stationery-supplies',
     subcategory_id: 'files-folders',
@@ -436,7 +486,7 @@ const SEED_LISTINGS = [
   // 5. hostel-room-essentials (2 Satkar, 2 Priya)
   {
     id: 17,
-    seller_id: 'student_a',
+    seller_id: 'student_e',
     title: 'Prestige 1.5L Electric Stainless Steel Kettle',
     category_id: 'hostel-room-essentials',
     subcategory_id: 'kitchen-kettle-induction',
@@ -454,7 +504,7 @@ const SEED_LISTINGS = [
   },
   {
     id: 18,
-    seller_id: 'student_a',
+    seller_id: 'student_i',
     title: 'Rechargeable LED Desk Study Lamp',
     category_id: 'hostel-room-essentials',
     subcategory_id: 'study-lamp-electricals',
@@ -472,7 +522,7 @@ const SEED_LISTINGS = [
   },
   {
     id: 19,
-    seller_id: 'student_b',
+    seller_id: 'student_j',
     title: 'Havells Personal Table Fan (White/Blue)',
     category_id: 'hostel-room-essentials',
     subcategory_id: 'cooling-heating',
@@ -490,7 +540,7 @@ const SEED_LISTINGS = [
   },
   {
     id: 20,
-    seller_id: 'student_b',
+    seller_id: 'student_j',
     title: 'Stackable 3-Tier Storage Drawer Organizer',
     category_id: 'hostel-room-essentials',
     subcategory_id: 'storage-organisers',
@@ -510,7 +560,7 @@ const SEED_LISTINGS = [
   // 6. fashion-accessories (2 Satkar, 2 Priya)
   {
     id: 21,
-    seller_id: 'student_a',
+    seller_id: 'student_h',
     title: 'Casio Vintage Digital Watch (A168WA)',
     category_id: 'fashion-accessories',
     subcategory_id: 'watches-jewellery',
@@ -528,7 +578,7 @@ const SEED_LISTINGS = [
   },
   {
     id: 22,
-    seller_id: 'student_a',
+    seller_id: 'student_f',
     title: 'Chitkara CSE Official Pullover Hoodie (Size L)',
     category_id: 'fashion-accessories',
     subcategory_id: 'college-merch-hoodies',
@@ -546,7 +596,7 @@ const SEED_LISTINGS = [
   },
   {
     id: 23,
-    seller_id: 'student_b',
+    seller_id: 'student_j',
     title: 'Wildcraft 35L Water-Resistant Laptop Backpack',
     category_id: 'fashion-accessories',
     subcategory_id: 'bags-backpacks',
@@ -564,7 +614,7 @@ const SEED_LISTINGS = [
   },
   {
     id: 24,
-    seller_id: 'student_b',
+    seller_id: 'student_k',
     title: 'Fastrack Aviator Sunglasses with Hard Case',
     category_id: 'fashion-accessories',
     subcategory_id: 'watches-jewellery',
@@ -584,7 +634,7 @@ const SEED_LISTINGS = [
   // 7. perfumes-grooming (2 Satkar, 2 Priya)
   {
     id: 25,
-    seller_id: 'student_a',
+    seller_id: 'student_g',
     title: 'Solid Amber & Sandalwood Cologne (15g Pocket Tin)',
     category_id: 'perfumes-grooming',
     subcategory_id: 'perfumes-deos',
@@ -602,7 +652,7 @@ const SEED_LISTINGS = [
   },
   {
     id: 26,
-    seller_id: 'student_a',
+    seller_id: 'student_g',
     title: 'Beardo Godfather Hair Wax + Beard Wash Combo',
     category_id: 'perfumes-grooming',
     subcategory_id: 'grooming-kits',
@@ -620,7 +670,7 @@ const SEED_LISTINGS = [
   },
   {
     id: 27,
-    seller_id: 'student_b',
+    seller_id: 'student_e',
     title: 'Botanical Room & Body Mist: Cedar & Lavender (50ml)',
     category_id: 'perfumes-grooming',
     subcategory_id: 'perfumes-deos',
@@ -638,7 +688,7 @@ const SEED_LISTINGS = [
   },
   {
     id: 28,
-    seller_id: 'student_b',
+    seller_id: 'student_k',
     title: 'The Ordinary Niacinamide 10% + Zinc 1% (30ml)',
     category_id: 'perfumes-grooming',
     subcategory_id: 'skincare',
@@ -658,7 +708,7 @@ const SEED_LISTINGS = [
   // 8. handmade-art (2 Satkar, 2 Priya)
   {
     id: 29,
-    seller_id: 'student_a',
+    seller_id: 'student_c',
     title: 'Hand-Carved Wooden Pen Stand & Mobile Dock',
     category_id: 'handmade-art',
     subcategory_id: 'custom-gifts',
@@ -676,7 +726,7 @@ const SEED_LISTINGS = [
   },
   {
     id: 30,
-    seller_id: 'student_a',
+    seller_id: 'student_j',
     title: 'Minimalist Campus Skyline Charcoal Sketch (Framed)',
     category_id: 'handmade-art',
     subcategory_id: 'paintings-sketches',
@@ -694,7 +744,7 @@ const SEED_LISTINGS = [
   },
   {
     id: 31,
-    seller_id: 'student_b',
+    seller_id: 'student_c',
     title: 'Handcrafted Matcha Green Ceramic Coffee Mug',
     category_id: 'handmade-art',
     subcategory_id: 'decor',
@@ -712,7 +762,7 @@ const SEED_LISTINGS = [
   },
   {
     id: 32,
-    seller_id: 'student_b',
+    seller_id: 'student_f',
     title: 'Handmade Daisy Floral Crochet Tote Bag',
     category_id: 'handmade-art',
     subcategory_id: 'crochet-knitting',
@@ -732,7 +782,7 @@ const SEED_LISTINGS = [
   // 9. sports-fitness-cycles (2 Satkar, 2 Priya)
   {
     id: 33,
-    seller_id: 'student_a',
+    seller_id: 'student_i',
     title: 'Yonex Muscle Power 29 Light Badminton Racket',
     category_id: 'sports-fitness-cycles',
     subcategory_id: 'racket-sports',
@@ -750,7 +800,7 @@ const SEED_LISTINGS = [
   },
   {
     id: 34,
-    seller_id: 'student_a',
+    seller_id: 'student_i',
     title: 'Rubber Coated Hex Dumbbells (5kg Pair)',
     category_id: 'sports-fitness-cycles',
     subcategory_id: 'gym-fitness',
@@ -768,7 +818,7 @@ const SEED_LISTINGS = [
   },
   {
     id: 35,
-    seller_id: 'student_b',
+    seller_id: 'student_i',
     title: 'Nivia Storm Football (Size 5, Rubber)',
     category_id: 'sports-fitness-cycles',
     subcategory_id: 'football-basketball',
@@ -786,7 +836,7 @@ const SEED_LISTINGS = [
   },
   {
     id: 36,
-    seller_id: 'student_b',
+    seller_id: 'student_l',
     title: 'Anti-Skid High Density 6mm Yoga Mat with Strap',
     category_id: 'sports-fitness-cycles',
     subcategory_id: 'yoga',
@@ -806,7 +856,7 @@ const SEED_LISTINGS = [
   // 10. other (2 Satkar, 2 Priya)
   {
     id: 37,
-    seller_id: 'student_a',
+    seller_id: 'student_h',
     title: 'Heavy Duty 4-Digit Combination Cable Bike Lock',
     category_id: 'other',
     subcategory_id: 'bicycles-accessories',
@@ -824,7 +874,7 @@ const SEED_LISTINGS = [
   },
   {
     id: 38,
-    seller_id: 'student_a',
+    seller_id: 'student_d',
     title: 'Foldable Laptop Bed Table with Cup Holder',
     category_id: 'other',
     subcategory_id: null,
@@ -842,7 +892,7 @@ const SEED_LISTINGS = [
   },
   {
     id: 39,
-    seller_id: 'student_b',
+    seller_id: 'student_e',
     title: 'Compact 3-Fold UV Resistant Rain Umbrella',
     category_id: 'other',
     subcategory_id: null,
@@ -860,7 +910,7 @@ const SEED_LISTINGS = [
   },
   {
     id: 40,
-    seller_id: 'student_b',
+    seller_id: 'student_l',
     title: 'Noise-Cancelling Memory Foam Earplugs (3 Pairs)',
     category_id: 'other',
     subcategory_id: null,
@@ -878,21 +928,53 @@ const SEED_LISTINGS = [
   }
 ];
 
-const photoCycle = [
+const photoItemMap = [
+  imgCalcBook,
+  imgOrgChem,
   imgCalcBook,
   imgOrgChem,
   imgGraphCalc,
   imgArduinoKit,
+  imgGraphCalc,
+  imgArduinoKit,
+  imgArduinoKit,
+  imgToteBag,
+  imgGraphCalc,
+  imgArduinoKit,
+  imgCalcBook,
+  imgSolidPerfume,
   imgMatchaMug,
   imgToteBag,
+  imgRoomSpray,
+  imgGraphCalc,
+  imgArduinoKit,
+  imgMatchaMug,
+  imgGraphCalc,
+  imgToteBag,
+  imgToteBag,
   imgSolidPerfume,
-  imgRoomSpray
+  imgSolidPerfume,
+  imgRoomSpray,
+  imgRoomSpray,
+  imgSolidPerfume,
+  imgMatchaMug,
+  imgToteBag,
+  imgMatchaMug,
+  imgToteBag,
+  imgArduinoKit,
+  imgGraphCalc,
+  imgSolidPerfume,
+  imgToteBag,
+  imgArduinoKit,
+  imgMatchaMug,
+  imgRoomSpray,
+  imgSolidPerfume
 ];
 
 const SEED_LISTING_PHOTOS = SEED_LISTINGS.map((listing, index) => ({
   id: index + 1,
   listing_id: listing.id,
-  url: photoCycle[index % photoCycle.length],
+  url: photoItemMap[index] || imgCalcBook,
   sort_order: 0
 }));
 

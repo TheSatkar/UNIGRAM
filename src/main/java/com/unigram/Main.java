@@ -137,22 +137,27 @@ public class Main {
             MessageJdbcDao messageDao = new MessageJdbcDao();
 
             // 1. Seed demo student accounts
-            if (!userDao.existsById(conn, "student_a")) {
-                userDao.insert(conn, new User("student_a", "Satkar Singh", "satkar0696.becse25@chitkara.edu.in"));
-            }
-            if (!userDao.existsById(conn, "student_b")) {
-                userDao.insert(conn, new User("student_b", "Priya K.", "priya.k@chitkara.edu.in"));
-            }
-            if (!userDao.existsById(conn, "admin_1")) {
-                userDao.insert(conn, new User("admin_1", "Campus Admin", "admin@chitkara.edu.in"));
-            }
-
-            // Legacy accounts
-            if (!userDao.existsById(conn, "usr_student_A")) {
-                userDao.insert(conn, new User("usr_student_A", "Alex Chen", "alex.chen@university.edu"));
-            }
-            if (!userDao.existsById(conn, "usr_student_B")) {
-                userDao.insert(conn, new User("usr_student_B", "Maya Patel", "maya.patel@university.edu"));
+            List<User> demoUsers = List.of(
+                    new User("admin_1", "Campus Admin", "admin@chitkara.edu.in"),
+                    new User("student_a", "Satkar Singh", "satkar0696.becse25@chitkara.edu.in"),
+                    new User("student_b", "Priya K.", "priya.k@chitkara.edu.in"),
+                    new User("student_c", "Nisha R.", "nisha.r@chitkara.edu.in"),
+                    new User("student_d", "Madhur T.", "madhur.t@chitkara.edu.in"),
+                    new User("student_e", "Charlie W.", "charlie.w@chitkara.edu.in"),
+                    new User("student_f", "Simran D.", "simran.d@chitkara.edu.in"),
+                    new User("student_g", "Harsh P.", "harsh.p@chitkara.edu.in"),
+                    new User("student_h", "Aman V.", "aman.v@chitkara.edu.in"),
+                    new User("student_i", "Rohan S.", "rohan.s@chitkara.edu.in"),
+                    new User("student_j", "Kavya M.", "kavya.m@chitkara.edu.in"),
+                    new User("student_k", "Ananya G.", "ananya.g@chitkara.edu.in"),
+                    new User("student_l", "Vikram B.", "vikram.b@chitkara.edu.in"),
+                    new User("usr_student_A", "Alex Chen", "alex.chen@university.edu"),
+                    new User("usr_student_B", "Maya Patel", "maya.patel@university.edu")
+            );
+            for (User u : demoUsers) {
+                if (!userDao.existsById(conn, u.getUserId())) {
+                    userDao.insert(conn, u);
+                }
             }
 
             // 2. Seed marketplace product references for all 40 catalog listings
@@ -162,20 +167,22 @@ public class Main {
                 }
             }
 
-            // 3. Seed demo conversation for Product 5 (Organic Chemistry): Buyer=student_b (Priya), Seller=student_a (Satkar)
-            Optional<Conversation> chemConv = convDao.findByParticipantsAndProduct(conn, "student_b", "student_a", "5");
-            if (chemConv.isEmpty()) {
-                String chemConvId = "conv_chem_001";
-                convDao.insert(conn, new Conversation(chemConvId, "student_b", "student_a", "5", LocalDateTime.now().minusHours(1)));
-                messageDao.insert(conn, new Message("msg_chem_01", chemConvId, "student_b",
-                        "Hi Satkar, is the Organic Chemistry book still available for meetup at Library Entrance?", LocalDateTime.now().minusMinutes(45)));
+            // 3. Seed demo conversation for Product 1 (Data Structures): Buyer=student_b (Priya), Seller=student_a (Satkar)
+            Optional<Conversation> dsConv = convDao.findByParticipantsAndProduct(conn, "student_b", "student_a", "1");
+            if (dsConv.isEmpty()) {
+                String convId = "conv_ds_001";
+                convDao.insert(conn, new Conversation(convId, "student_b", "student_a", "1", LocalDateTime.now().minusHours(1)));
+                messageDao.insert(conn, new Message("msg_ds_01", convId, "student_b",
+                        "Hi Satkar, is the Data Structures textbook still available for meetup at Library Entrance?", LocalDateTime.now().minusMinutes(45)));
+                messageDao.insert(conn, new Message("msg_ds_02", convId, "student_a",
+                        "Yes Priya! I can meet you after class at 4 PM.", LocalDateTime.now().minusMinutes(30)));
             }
 
-            // 4. Seed demo conversation for Product 1 (Calculus): Buyer=student_a (Satkar), Seller=student_b (Priya)
-            Optional<Conversation> calcConv = convDao.findByParticipantsAndProduct(conn, "student_a", "student_b", "1");
+            // 4. Seed demo conversation for Product 3 (Calculus): Buyer=student_a (Satkar), Seller=student_b (Priya)
+            Optional<Conversation> calcConv = convDao.findByParticipantsAndProduct(conn, "student_a", "student_b", "3");
             if (calcConv.isEmpty()) {
-                String calcConvId = "conv_calc_001";
-                convDao.insert(conn, new Conversation(calcConvId, "student_a", "student_b", "1", LocalDateTime.now().minusHours(2)));
+                String calcConvId = "conv_calc_003";
+                convDao.insert(conn, new Conversation(calcConvId, "student_a", "student_b", "3", LocalDateTime.now().minusHours(2)));
                 messageDao.insert(conn, new Message("msg_calc_01", calcConvId, "student_a",
                         "Hi Priya! Is your Calculus textbook still available?", LocalDateTime.now().minusMinutes(90)));
                 messageDao.insert(conn, new Message("msg_calc_02", calcConvId, "student_b",

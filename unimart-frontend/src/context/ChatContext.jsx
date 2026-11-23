@@ -528,7 +528,7 @@ export function ChatProvider({ children }) {
           return [updatedConvObj, ...prev];
         });
 
-        persistStoredConversations((prevStored) => {
+        persistStoredConversations(currentUserId, (prevStored) => {
           const idx = prevStored.findIndex((c) => c.id === tempConvId || c.id === targetConvId || (c.productId === productId && (c.sellerId === sellerId || c.buyerId === currentUserId)));
           if (idx !== -1) {
             const next = [...prevStored];

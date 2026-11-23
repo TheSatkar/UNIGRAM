@@ -125,44 +125,49 @@ public class ApiRouter implements HttpHandler {
             return;
         }
         try {
-            // Seed Admin
-            User admin = new User("admin_1", "Campus Admin", "admin@chitkara.edu.in", "admin", "ADMIN-001",
-                    PasswordHasher.hashPassword("Unimart@123"));
-            inMemoryChatService.registerUser(admin);
+            // Seed demo student accounts
+            List<User> demoUsers = List.of(
+                    new User("admin_1", "Campus Admin", "admin@chitkara.edu.in", "admin", "ADMIN-001", PasswordHasher.hashPassword("Unimart@123")),
+                    new User("student_a", "Satkar Singh", "satkar0696.becse25@chitkara.edu.in", "student", "2110990696", PasswordHasher.hashPassword("student123")),
+                    new User("student_b", "Priya K.", "priya.k@chitkara.edu.in", "student", "2110990697", PasswordHasher.hashPassword("student123")),
+                    new User("student_c", "Nisha R.", "nisha.r@chitkara.edu.in", "student", "2110990698", PasswordHasher.hashPassword("student123")),
+                    new User("student_d", "Madhur T.", "madhur.t@chitkara.edu.in", "student", "2110990699", PasswordHasher.hashPassword("student123")),
+                    new User("student_e", "Charlie W.", "charlie.w@chitkara.edu.in", "student", "2110990700", PasswordHasher.hashPassword("student123")),
+                    new User("student_f", "Simran D.", "simran.d@chitkara.edu.in", "student", "2110990701", PasswordHasher.hashPassword("student123")),
+                    new User("student_g", "Harsh P.", "harsh.p@chitkara.edu.in", "student", "2110990702", PasswordHasher.hashPassword("student123")),
+                    new User("student_h", "Aman V.", "aman.v@chitkara.edu.in", "student", "2110990703", PasswordHasher.hashPassword("student123")),
+                    new User("student_i", "Rohan S.", "rohan.s@chitkara.edu.in", "student", "2110990704", PasswordHasher.hashPassword("student123")),
+                    new User("student_j", "Kavya M.", "kavya.m@chitkara.edu.in", "student", "2110990705", PasswordHasher.hashPassword("student123")),
+                    new User("student_k", "Ananya G.", "ananya.g@chitkara.edu.in", "student", "2110990706", PasswordHasher.hashPassword("student123")),
+                    new User("student_l", "Vikram B.", "vikram.b@chitkara.edu.in", "student", "2110990707", PasswordHasher.hashPassword("student123"))
+            );
+            for (User u : demoUsers) {
+                inMemoryChatService.registerUser(u);
+            }
 
-            // Seed Student A (Satkar)
-            User satkar = new User("student_a", "Satkar Singh", "satkar0696.becse25@chitkara.edu.in", "student", "2110990696",
-                    PasswordHasher.hashPassword("student123"));
-            inMemoryChatService.registerUser(satkar);
-
-            // Seed Student B (Priya)
-            User priya = new User("student_b", "Priya K.", "priya.k@chitkara.edu.in", "student", "2110990697",
-                    PasswordHasher.hashPassword("student123"));
-            inMemoryChatService.registerUser(priya);
-
-            // Seed 40 marketplace listings across all 10 categories (2 Satkar, 2 Priya each)
+            // Seed 40 marketplace listings (2 Satkar, 2 Priya, 36 diverse fictional students)
             List<Listing> seedCatalog = Listing.createSeedCatalog();
             for (Listing l : seedCatalog) {
                 inMemoryStorage.saveListing(l);
                 inMemoryChatService.registerProduct(new ProductReference(String.valueOf(l.getId()), l.getTitle()));
             }
 
-            // Seed initial thread between Priya (buyer) and Satkar (seller)
-            Conversation c = inMemoryChatService.createConversation("student_b", "student_a", "1");
-            inMemoryMessageService.sendMessage(c.getConversationId(), "student_b",
+            // Seed demo conversation threads
+            Conversation c1 = inMemoryChatService.createConversation("student_b", "student_a", "1");
+            inMemoryMessageService.sendMessage(c1.getConversationId(), "student_b",
                     "Hi Satkar, is the Data Structures textbook still available for meetup at Library Entrance?");
+
+            Conversation c3 = inMemoryChatService.createConversation("student_a", "student_b", "3");
+            inMemoryMessageService.sendMessage(c3.getConversationId(), "student_a",
+                    "Hi Priya! Is your Calculus textbook still available?");
 
             // If MySQL is active, seed the demo accounts and catalog to the database as well
             if (isDatabaseAvailable()) {
                 try (Connection conn = DatabaseConnectionFactory.getConnection(config)) {
-                    if (!userDao.existsById(conn, "admin_1")) {
-                        userDao.insert(conn, admin);
-                    }
-                    if (!userDao.existsById(conn, "student_a")) {
-                        userDao.insert(conn, satkar);
-                    }
-                    if (!userDao.existsById(conn, "student_b")) {
-                        userDao.insert(conn, priya);
+                    for (User u : demoUsers) {
+                        if (!userDao.existsById(conn, u.getUserId())) {
+                            userDao.insert(conn, u);
+                        }
                     }
                     ProductReferenceJdbcDao productDao = new ProductReferenceJdbcDao();
                     for (Listing l : seedCatalog) {
@@ -170,6 +175,33 @@ public class ApiRouter implements HttpHandler {
                         if (!productDao.existsById(conn, String.valueOf(l.getId()))) {
                             productDao.insert(conn, new ProductReference(String.valueOf(l.getId()), l.getTitle()));
                         }
+                        if (l.getPhotos() != null && !l.getPhotos().isEmpty()) {
+                            List<String> existingPhotos = listingDao.findPhotosByListingId(conn, l.getId());
+                            if (existingPhotos.isEmpty()) {
+                                for (int i = 0; i < l.getPhotos().size(); i++) {
+                                    listingDao.insertPhoto(conn, l.getId(), l.getPhotos().get(i), i);
+                                }
+                            }
+                        }
+                    }
+
+                    // Seed demo conversations in MySQL
+                    ConversationJdbcDao convDao = new ConversationJdbcDao();
+                    MessageJdbcDao messageDao = new MessageJdbcDao();
+                    Optional<Conversation> dsConv = convDao.findByParticipantsAndProduct(conn, "student_b", "student_a", "1");
+                    if (dsConv.isEmpty()) {
+                        String convId = "conv_ds_001";
+                        convDao.insert(conn, new Conversation(convId, "student_b", "student_a", "1", LocalDateTime.now().minusHours(1)));
+                        messageDao.insert(conn, new Message("msg_ds_01", convId, "student_b",
+                                "Hi Satkar, is the Data Structures textbook still available for meetup at Library Entrance?", LocalDateTime.now().minusMinutes(45)));
+                    }
+
+                    Optional<Conversation> calcConv = convDao.findByParticipantsAndProduct(conn, "student_a", "student_b", "3");
+                    if (calcConv.isEmpty()) {
+                        String convId = "conv_calc_003";
+                        convDao.insert(conn, new Conversation(convId, "student_a", "student_b", "3", LocalDateTime.now().minusHours(2)));
+                        messageDao.insert(conn, new Message("msg_calc_01", convId, "student_a",
+                                "Hi Priya! Is your Calculus textbook still available?", LocalDateTime.now().minusMinutes(90)));
                     }
                 } catch (Exception ignored) {}
             }

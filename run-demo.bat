@@ -80,21 +80,27 @@ start "Uni-Gram Java Backend" cmd /k java -cp "bin;lib/*" com.unigram.Main --ser
 echo Verifying backend health at http://127.0.0.1:8080/api/health...
 set BACKEND_UP=0
 set MYSQL_CONNECTED=0
-for /l %%i in (1, 1, 15) do (
-  if !BACKEND_UP! equ 0 (
-    for /f "usebackq delims=" %%s in (`powershell -NoProfile -Command "try { $r = Invoke-RestMethod -Uri 'http://127.0.0.1:8080/api/health' -TimeoutSec 1; if ($r.status -eq 'success') { if ($r.data.database -eq 'CONNECTED') { 'UP_CONNECTED' } else { 'UP_INMEMORY' } } else { 'DOWN' } } catch { 'DOWN' }"`) do (
-      if "%%s"=="UP_CONNECTED" (
-        set BACKEND_UP=1
-        set MYSQL_CONNECTED=1
-      ) else if "%%s"=="UP_INMEMORY" (
-        set BACKEND_UP=1
-        set MYSQL_CONNECTED=0
-      ) else (
-        ping 127.0.0.1 -n 2 >nul
-      )
-    )
-  )
+set RETRIES=0
+
+:wait_backend
+set /a RETRIES+=1
+powershell -NoProfile -Command "$r = try { Invoke-RestMethod -Uri 'http://127.0.0.1:8080/api/health' -TimeoutSec 1 } catch { $null }; if ($r -and $r.status -eq 'success') { if ($r.data.database -eq 'CONNECTED') { exit 0 } else { exit 2 } } else { exit 1 }"
+set B_STATUS=%ERRORLEVEL%
+if %B_STATUS% equ 0 (
+  set BACKEND_UP=1
+  set MYSQL_CONNECTED=1
+  goto backend_done
 )
+if %B_STATUS% equ 2 (
+  set BACKEND_UP=1
+  set MYSQL_CONNECTED=0
+  goto backend_done
+)
+if %RETRIES% geq 15 goto backend_done
+ping 127.0.0.1 -n 2 >nul
+goto wait_backend
+
+:backend_done
 
 if !BACKEND_UP! equ 0 (
   echo [ERROR] Java API did not respond on port 8080.
@@ -126,16 +132,20 @@ cd /d "%~dp0"
 echo.
 echo [5/5] Waiting for frontend at http://localhost:5173...
 set FRONTEND_UP=0
-for /l %%i in (1, 1, 15) do (
-  if !FRONTEND_UP! equ 0 (
-    powershell -NoProfile -Command "try { $r = Invoke-WebRequest -Uri 'http://localhost:5173' -UseBasicParsing -TimeoutSec 1; if ($r.StatusCode -eq 200) { exit 0 } else { exit 1 } } catch { exit 1 }"
-    if not errorlevel 1 (
-      set FRONTEND_UP=1
-    ) else (
-      ping 127.0.0.1 -n 2 >nul
-    )
-  )
+set F_RETRIES=0
+
+:wait_frontend
+set /a F_RETRIES+=1
+powershell -NoProfile -Command "try { $r = Invoke-WebRequest -Uri 'http://localhost:5173' -UseBasicParsing -TimeoutSec 1; if ($r.StatusCode -eq 200) { exit 0 } else { exit 1 } } catch { exit 1 }"
+if not errorlevel 1 (
+  set FRONTEND_UP=1
+  goto frontend_done
 )
+if %F_RETRIES% geq 15 goto frontend_done
+ping 127.0.0.1 -n 2 >nul
+goto wait_frontend
+
+:frontend_done
 
 if !FRONTEND_UP! equ 0 (
   echo [ERROR] Frontend failed to respond on http://localhost:5173 within 15 seconds.

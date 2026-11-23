@@ -23,7 +23,54 @@ import { apiRequest } from './apiClient.js';
 export function adaptServerListing(item) {
   if (!item) return null;
   const id = Number(item.id);
-  const photos = Array.isArray(item.photos) ? item.photos : [];
+  let photos = Array.isArray(item.photos) && item.photos.length > 0 ? item.photos : [];
+  if (photos.length === 0) {
+    const photoMap = {
+      1: '/assets/products/calculus.jpg',
+      2: '/assets/products/organic_chem.jpg',
+      3: '/assets/products/calculus.jpg',
+      4: '/assets/products/organic_chem.jpg',
+      5: '/assets/products/graphing_calc.jpg',
+      6: '/assets/products/arduino_kit.jpg',
+      7: '/assets/products/graphing_calc.jpg',
+      8: '/assets/products/arduino_kit.jpg',
+      9: '/assets/products/arduino_kit.jpg',
+      10: '/assets/products/tote_bag.jpg',
+      11: '/assets/products/graphing_calc.jpg',
+      12: '/assets/products/arduino_kit.jpg',
+      13: '/assets/products/calculus.jpg',
+      14: '/assets/products/solid_perfume.jpg',
+      15: '/assets/products/matcha_mug.jpg',
+      16: '/assets/products/tote_bag.jpg',
+      17: '/assets/products/room_spray.jpg',
+      18: '/assets/products/graphing_calc.jpg',
+      19: '/assets/products/arduino_kit.jpg',
+      20: '/assets/products/matcha_mug.jpg',
+      21: '/assets/products/graphing_calc.jpg',
+      22: '/assets/products/tote_bag.jpg',
+      23: '/assets/products/tote_bag.jpg',
+      24: '/assets/products/solid_perfume.jpg',
+      25: '/assets/products/solid_perfume.jpg',
+      26: '/assets/products/room_spray.jpg',
+      27: '/assets/products/room_spray.jpg',
+      28: '/assets/products/solid_perfume.jpg',
+      29: '/assets/products/matcha_mug.jpg',
+      30: '/assets/products/tote_bag.jpg',
+      31: '/assets/products/matcha_mug.jpg',
+      32: '/assets/products/tote_bag.jpg',
+      33: '/assets/products/arduino_kit.jpg',
+      34: '/assets/products/graphing_calc.jpg',
+      35: '/assets/products/solid_perfume.jpg',
+      36: '/assets/products/tote_bag.jpg',
+      37: '/assets/products/arduino_kit.jpg',
+      38: '/assets/products/matcha_mug.jpg',
+      39: '/assets/products/room_spray.jpg',
+      40: '/assets/products/solid_perfume.jpg'
+    };
+    if (photoMap[id]) {
+      photos = [photoMap[id]];
+    }
+  }
   const catObj = categories.find((c) => c.id === item.categoryId || c.id === item.category_id);
   const subcatObj = catObj?.subcategories?.find((s) => s.id === item.subcategoryId || s.id === item.subcategory_id);
 

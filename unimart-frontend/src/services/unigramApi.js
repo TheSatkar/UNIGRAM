@@ -8,6 +8,7 @@
  */
 
 import { apiRequest, API_BASE_URL } from '../api/apiClient.js';
+import { authApi } from '../api/authApi.js';
 
 class UnigramApiError extends Error {
   constructor(message, status = 500, data = null) {

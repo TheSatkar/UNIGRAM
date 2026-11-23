@@ -110,152 +110,212 @@ public class Listing {
     public static List<Listing> createSeedCatalog() {
         List<Listing> list = new ArrayList<>(40);
 
-        // 1. books-notes (2 Satkar, 2 Priya)
+        // 1. books-notes
         list.add(createSeedItem(1, "student_a", "Data Structures & Algorithms in Java (4th Ed)", "books-notes", "engineering-textbooks",
                 "550.00", "1299.00", "Like New", "Library Entrance",
-                "Standard DSA textbook with detailed code snippets and practice questions. Clean pages with no marks.", "Academic Pick", false));
-        list.add(createSeedItem(2, "student_a", "Discrete Mathematics & Its Applications (Rosen)", "books-notes", "engineering-textbooks",
+                "Standard DSA textbook with detailed code snippets and practice questions. Clean pages with no marks.", "Academic Pick", false,
+                "/assets/products/calculus.jpg"));
+        list.add(createSeedItem(2, "student_c", "Discrete Mathematics & Its Applications (Rosen)", "books-notes", "engineering-textbooks",
                 "420.00", "950.00", "Good", "Library Entrance",
-                "Kenneth Rosen 8th Edition discrete structures book. Great condition with handwritten summary cheat sheets.", "Exam Essential", true));
+                "Kenneth Rosen 8th Edition discrete structures book. Great condition with handwritten summary cheat sheets.", "Exam Essential", true,
+                "/assets/products/organic_chem.jpg"));
         list.add(createSeedItem(3, "student_b", "Calculus: Early Transcendentals (Stewart)", "books-notes", "engineering-textbooks",
                 "480.00", "1499.00", "Like New", "Library Entrance",
-                "Single Variable Calculus textbook with limits, derivatives & integrals. Clean condition.", "Academic Pick", false));
-        list.add(createSeedItem(4, "student_b", "GATE CS 2026 Solved Papers & Notes", "books-notes", "competitive-exam-prep",
+                "Single Variable Calculus textbook with limits, derivatives & integrals. Clean condition.", "Academic Pick", false,
+                "/assets/products/calculus.jpg"));
+        list.add(createSeedItem(4, "student_e", "GATE CS 2026 Solved Papers & Notes", "books-notes", "competitive-exam-prep",
                 "350.00", "800.00", "Good", "Square One",
-                "12 years solved GATE CSE question papers with detailed answer keys and handwritten revision notes.", "GATE Ready", true));
+                "12 years solved GATE CSE question papers with detailed answer keys and handwritten revision notes.", "GATE Ready", true,
+                "/assets/products/organic_chem.jpg"));
 
-        // 2. electronics-gadgets (2 Satkar, 2 Priya)
+        // 2. electronics-gadgets
         list.add(createSeedItem(5, "student_a", "Logitech MX Master 2S Wireless Mouse", "electronics-gadgets", "keyboards-mice",
                 "1850.00", "3995.00", "Excellent", "Turing Block",
-                "Ergonomic wireless mouse with hyper-fast scroll wheel and multi-device Bluetooth pairing. Battery holds charge for weeks.", "Verified Working", false));
-        list.add(createSeedItem(6, "student_a", "Boat Stone 650 10W Bluetooth Speaker", "electronics-gadgets", "audio-earphones-speakers",
+                "Ergonomic wireless mouse with hyper-fast scroll wheel and multi-device Bluetooth pairing. Battery holds charge for weeks.", "Verified Working", false,
+                "/assets/products/graphing_calc.jpg"));
+        list.add(createSeedItem(6, "student_f", "Boat Stone 650 10W Bluetooth Speaker", "electronics-gadgets", "audio-earphones-speakers",
                 "799.00", "1990.00", "Like New", "Hostel Gate",
-                "Rugged waterproof Bluetooth speaker with deep bass and aux input. Used only a couple times in hostel room.", "Hostel Favorite", false));
+                "Rugged waterproof Bluetooth speaker with deep bass and aux input. Used only a couple times in hostel room.", "Hostel Favorite", false,
+                "/assets/products/arduino_kit.jpg"));
         list.add(createSeedItem(7, "student_b", "Apple 20W USB-C Power Adapter + Cable", "electronics-gadgets", "chargers-cables",
                 "990.00", "1900.00", "Like New", "Square One",
-                "Original Apple 20W fast charging brick with 1m braided USB-C to Lightning cable. Perfect working order.", "Original Apple", false));
-        list.add(createSeedItem(8, "student_b", "SanDisk Ultra 128GB Dual Drive Type-C", "electronics-gadgets", "storage-pendrives-hdds",
+                "Original Apple 20W fast charging brick with 1m braided USB-C to Lightning cable. Perfect working order.", "Original Apple", false,
+                "/assets/products/graphing_calc.jpg"));
+        list.add(createSeedItem(8, "student_g", "SanDisk Ultra 128GB Dual Drive Type-C", "electronics-gadgets", "storage-pendrives-hdds",
                 "550.00", "1200.00", "Brand New", "Library Entrance",
-                "High-speed OTG USB 3.1 pendrive with both Type-C and Type-A connectors for easy phone and laptop transfers.", "Unopened", false));
+                "High-speed OTG USB 3.1 pendrive with both Type-C and Type-A connectors for easy phone and laptop transfers.", "Unopened", false,
+                "/assets/products/arduino_kit.jpg"));
 
-        // 3. lab-engineering-gear (2 Satkar, 2 Priya)
-        list.add(createSeedItem(9, "student_a", "Arduino Uno R3 Starter Kit with 30+ Sensors", "lab-engineering-gear", "arduino-robotics-kits",
+        // 3. lab-engineering-gear
+        list.add(createSeedItem(9, "student_d", "Arduino Uno R3 Starter Kit with 30+ Sensors", "lab-engineering-gear", "arduino-robotics-kits",
                 "1150.00", "2400.00", "Like New", "Turing Block",
-                "Original ATmega328P Arduino board, breadboard, OLED display, ultrasonic sensors, motors and resistors. Tested in Turing lab.", "Lab Ready", false));
-        list.add(createSeedItem(10, "student_a", "Standard Student Lab Coat (Size L, Unisex)", "lab-engineering-gear", "lab-coats-safety-gear",
+                "Original ATmega328P Arduino board, breadboard, OLED display, ultrasonic sensors, motors and resistors. Tested in Turing lab.", "Lab Ready", false,
+                "/assets/products/arduino_kit.jpg"));
+        list.add(createSeedItem(10, "student_h", "Standard Student Lab Coat (Size L, Unisex)", "lab-engineering-gear", "lab-coats-safety-gear",
                 "250.00", "550.00", "Good", "Picasso Block",
-                "White 100% cotton lab coat required for chemistry and physics practicals. Washed and sanitized.", "Mandatory Gear", false));
-        list.add(createSeedItem(11, "student_b", "Casio fx-991EX ClassWiz Scientific Calculator", "lab-engineering-gear", "scientific-calculators",
+                "White 100% cotton lab coat required for chemistry and physics practicals. Washed and sanitized.", "Mandatory Gear", false,
+                "/assets/products/tote_bag.jpg"));
+        list.add(createSeedItem(11, "student_d", "Casio fx-991EX ClassWiz Scientific Calculator", "lab-engineering-gear", "scientific-calculators",
                 "850.00", "1595.00", "Excellent", "Turing Block",
-                "High-resolution solar scientific calculator with matrix and equation solver. Allowed in university examinations.", "Exam Approved", false));
-        list.add(createSeedItem(12, "student_b", "Omega Mini Drafter & Engineering Drawing Set", "lab-engineering-gear", "drafters-drawing-kits",
+                "High-resolution solar scientific calculator with matrix and equation solver. Allowed in university examinations.", "Exam Approved", false,
+                "/assets/products/graphing_calc.jpg"));
+        list.add(createSeedItem(12, "student_d", "Omega Mini Drafter & Engineering Drawing Set", "lab-engineering-gear", "drafters-drawing-kits",
                 "390.00", "850.00", "Like New", "Edison Block",
-                "Mini drafter with scale, clamps, sheet clips, compass and sheet container for engineering graphics lab.", "First Year Must", false));
+                "Mini drafter with scale, clamps, sheet clips, compass and sheet container for engineering graphics lab.", "First Year Must", false,
+                "/assets/products/arduino_kit.jpg"));
 
-        // 4. stationery-supplies (2 Satkar, 2 Priya)
-        list.add(createSeedItem(13, "student_a", "Classmate Spiral Notebook Bundle (Pack of 5)", "stationery-supplies", "notebooks-registers",
+        // 4. stationery-supplies
+        list.add(createSeedItem(13, "student_h", "Classmate Spiral Notebook Bundle (Pack of 5)", "stationery-supplies", "notebooks-registers",
                 "220.00", "400.00", "Brand New", "Square One",
-                "Unused 300-page single line ruled spiral bound registers with thick smooth pages for semester note-taking.", "Value Pack", false));
-        list.add(createSeedItem(14, "student_a", "Uni-ball Eye Rollerball Pens (Set of 6)", "stationery-supplies", "pens-writing",
+                "Unused 300-page single line ruled spiral bound registers with thick smooth pages for semester note-taking.", "Value Pack", false,
+                "/assets/products/calculus.jpg"));
+        list.add(createSeedItem(14, "student_g", "Uni-ball Eye Rollerball Pens (Set of 6)", "stationery-supplies", "pens-writing",
                 "180.00", "360.00", "Brand New", "Food Court",
-                "Smooth waterproof pigment ink roller pens. Brand new sealed pack of 3 blue and 3 black pens.", "Smooth Writer", false));
-        list.add(createSeedItem(15, "student_b", "Camel Acrylic Color Tubes (12 Shades) + Brushes", "stationery-supplies", "art-supplies",
+                "Smooth waterproof pigment ink roller pens. Brand new sealed pack of 3 blue and 3 black pens.", "Smooth Writer", false,
+                "/assets/products/solid_perfume.jpg"));
+        list.add(createSeedItem(15, "student_c", "Camel Acrylic Color Tubes (12 Shades) + Brushes", "stationery-supplies", "art-supplies",
                 "280.00", "520.00", "Like New", "Picasso Block",
-                "Set of 12 rich pigment acrylic colors with 4 synthetic brushes. Only 2 tubes opened for a college poster project.", "Creative Pick", false));
-        list.add(createSeedItem(16, "student_b", "Expanding Document File Folder (13 Pockets)", "stationery-supplies", "files-folders",
+                "Set of 12 rich pigment acrylic colors with 4 synthetic brushes. Only 2 tubes opened for a college poster project.", "Creative Pick", false,
+                "/assets/products/matcha_mug.jpg"));
+        list.add(createSeedItem(16, "student_f", "Expanding Document File Folder (13 Pockets)", "stationery-supplies", "files-folders",
                 "150.00", "320.00", "Like New", "Library Entrance",
-                "Heavy duty accordion style organizer folder with colored divider tabs for keeping semester handouts safe.", "Organized", false));
+                "Heavy duty accordion style organizer folder with colored divider tabs for keeping semester handouts safe.", "Organized", false,
+                "/assets/products/tote_bag.jpg"));
 
-        // 5. hostel-room-essentials (2 Satkar, 2 Priya)
-        list.add(createSeedItem(17, "student_a", "Prestige 1.5L Electric Stainless Steel Kettle", "hostel-room-essentials", "kitchen-kettle-induction",
+        // 5. hostel-room-essentials
+        list.add(createSeedItem(17, "student_e", "Prestige 1.5L Electric Stainless Steel Kettle", "hostel-room-essentials", "kitchen-kettle-induction",
                 "550.00", "1195.00", "Excellent", "Hostel Gate",
-                "Fast boiling electric kettle with auto shut-off. Perfect for late-night Maggi, coffee, and green tea in hostel.", "Hostel Essential", false));
-        list.add(createSeedItem(18, "student_a", "Rechargeable LED Desk Study Lamp", "hostel-room-essentials", "study-lamp-electricals",
+                "Fast boiling electric kettle with auto shut-off. Perfect for late-night Maggi, coffee, and green tea in hostel.", "Hostel Essential", false,
+                "/assets/products/room_spray.jpg"));
+        list.add(createSeedItem(18, "student_i", "Rechargeable LED Desk Study Lamp", "hostel-room-essentials", "study-lamp-electricals",
                 "320.00", "699.00", "Like New", "Hostel Gate",
-                "Touch sensor 3 brightness dimmable study lamp with flexible gooseneck and USB charging port.", "Night Study", false));
-        list.add(createSeedItem(19, "student_b", "Havells Personal Table Fan (White/Blue)", "hostel-room-essentials", "cooling-heating",
+                "Touch sensor 3 brightness dimmable study lamp with flexible gooseneck and USB charging port.", "Night Study", false,
+                "/assets/products/graphing_calc.jpg"));
+        list.add(createSeedItem(19, "student_j", "Havells Personal Table Fan (White/Blue)", "hostel-room-essentials", "cooling-heating",
                 "650.00", "1400.00", "Good", "Hostel Gate",
-                "Compact quiet table fan with 3 speed settings. Lightweight and fits easily on hostel study desk.", "Room Cooler", false));
-        list.add(createSeedItem(20, "student_b", "Stackable 3-Tier Storage Drawer Organizer", "hostel-room-essentials", "storage-organisers",
+                "Compact quiet table fan with 3 speed settings. Lightweight and fits easily on hostel study desk.", "Room Cooler", false,
+                "/assets/products/arduino_kit.jpg"));
+        list.add(createSeedItem(20, "student_j", "Stackable 3-Tier Storage Drawer Organizer", "hostel-room-essentials", "storage-organisers",
                 "380.00", "799.00", "Like New", "Square One",
-                "Durable modular storage cabinet for toiletries, snacks, medicines, and cables. Keeps hostel desk tidy.", "Space Saver", false));
+                "Durable modular storage cabinet for toiletries, snacks, medicines, and cables. Keeps hostel desk tidy.", "Space Saver", false,
+                "/assets/products/matcha_mug.jpg"));
 
-        // 6. fashion-accessories (2 Satkar, 2 Priya)
-        list.add(createSeedItem(21, "student_a", "Casio Vintage Digital Watch (A168WA)", "fashion-accessories", "watches-jewellery",
+        // 6. fashion-accessories
+        list.add(createSeedItem(21, "student_h", "Casio Vintage Digital Watch (A168WA)", "fashion-accessories", "watches-jewellery",
                 "950.00", "1895.00", "Like New", "Square One",
-                "Classic retro stainless steel digital watch with Illuminator backlight, stopwatch, and water resistance.", "Vintage Classic", false));
-        list.add(createSeedItem(22, "student_a", "Chitkara CSE Official Pullover Hoodie (Size L)", "fashion-accessories", "college-merch-hoodies",
+                "Classic retro stainless steel digital watch with Illuminator backlight, stopwatch, and water resistance.", "Vintage Classic", false,
+                "/assets/products/graphing_calc.jpg"));
+        list.add(createSeedItem(22, "student_f", "Chitkara CSE Official Pullover Hoodie (Size L)", "fashion-accessories", "college-merch-hoodies",
                 "599.00", "1200.00", "Like New", "Turing Block",
-                "Warm fleece black campus hoodie with embroidered university crest. Barely worn during previous winter fest.", "Official Merch", false));
-        list.add(createSeedItem(23, "student_b", "Wildcraft 35L Water-Resistant Laptop Backpack", "fashion-accessories", "bags-backpacks",
+                "Warm fleece black campus hoodie with embroidered university crest. Barely worn during previous winter fest.", "Official Merch", false,
+                "/assets/products/tote_bag.jpg"));
+        list.add(createSeedItem(23, "student_j", "Wildcraft 35L Water-Resistant Laptop Backpack", "fashion-accessories", "bags-backpacks",
                 "750.00", "1699.00", "Good", "Library Entrance",
-                "Sturdy laptop college backpack with rain cover, ergonomic shoulder padding, and dedicated 15.6 inch laptop sleeve.", "Campus Daily", false));
-        list.add(createSeedItem(24, "student_b", "Fastrack Aviator Sunglasses with Hard Case", "fashion-accessories", "watches-jewellery",
+                "Sturdy laptop college backpack with rain cover, ergonomic shoulder padding, and dedicated 15.6 inch laptop sleeve.", "Campus Daily", false,
+                "/assets/products/tote_bag.jpg"));
+        list.add(createSeedItem(24, "student_k", "Fastrack Aviator Sunglasses with Hard Case", "fashion-accessories", "watches-jewellery",
                 "490.00", "1199.00", "Like New", "Food Court",
-                "100% UV protected metal frame aviator shades with polarized lenses and scratch-free carrying case.", "UV Protected", false));
+                "100% UV protected metal frame aviator shades with polarized lenses and scratch-free carrying case.", "UV Protected", false,
+                "/assets/products/solid_perfume.jpg"));
 
-        // 7. perfumes-grooming (2 Satkar, 2 Priya)
-        list.add(createSeedItem(25, "student_a", "Solid Amber & Sandalwood Cologne (15g Pocket Tin)", "perfumes-grooming", "perfumes-deos",
+        // 7. perfumes-grooming
+        list.add(createSeedItem(25, "student_g", "Solid Amber & Sandalwood Cologne (15g Pocket Tin)", "perfumes-grooming", "perfumes-deos",
                 "249.00", "450.00", "Brand New", "Hostel Gate",
-                "Alcohol-free travel solid cologne in a sliding matte metal tin. Warm Mysore sandalwood notes blended with amber.", "Pocket Cologne", false));
-        list.add(createSeedItem(26, "student_a", "Beardo Godfather Hair Wax + Beard Wash Combo", "perfumes-grooming", "grooming-kits",
+                "Alcohol-free travel solid cologne in a sliding matte metal tin. Warm Mysore sandalwood notes blended with amber.", "Pocket Cologne", false,
+                "/assets/products/solid_perfume.jpg"));
+        list.add(createSeedItem(26, "student_g", "Beardo Godfather Hair Wax + Beard Wash Combo", "perfumes-grooming", "grooming-kits",
                 "290.00", "650.00", "Brand New", "Square One",
-                "Strong hold matte finish hair clay wax and refreshing aloe beard cleanser. Unopened sealed packaging.", "Grooming Pack", false));
-        list.add(createSeedItem(27, "student_b", "Botanical Room & Body Mist: Cedar & Lavender (50ml)", "perfumes-grooming", "perfumes-deos",
+                "Strong hold matte finish hair clay wax and refreshing aloe beard cleanser. Unopened sealed packaging.", "Grooming Pack", false,
+                "/assets/products/room_spray.jpg"));
+        list.add(createSeedItem(27, "student_e", "Botanical Room & Body Mist: Cedar & Lavender (50ml)", "perfumes-grooming", "perfumes-deos",
                 "299.00", "499.00", "Freshly Crafted", "Food Court",
-                "Includes: Natural Essential Oils. Freshly crafted hand-blended botanical fragrance for calming study vibes.", "Organic", false));
-        list.add(createSeedItem(28, "student_b", "The Ordinary Niacinamide 10% + Zinc 1% (30ml)", "perfumes-grooming", "skincare",
+                "Includes: Natural Essential Oils. Freshly crafted hand-blended botanical fragrance for calming study vibes.", "Organic", false,
+                "/assets/products/room_spray.jpg"));
+        list.add(createSeedItem(28, "student_k", "The Ordinary Niacinamide 10% + Zinc 1% (30ml)", "perfumes-grooming", "skincare",
                 "380.00", "600.00", "Brand New", "Library Entrance",
-                "Original authentic serum for blemish control and sebum reduction. Sealed dropper bottle.", "Sealed Bottle", false));
+                "Original authentic serum for blemish control and sebum reduction. Sealed dropper bottle.", "Sealed Bottle", false,
+                "/assets/products/solid_perfume.jpg"));
 
-        // 8. handmade-art (2 Satkar, 2 Priya)
-        list.add(createSeedItem(29, "student_a", "Hand-Carved Wooden Pen Stand & Mobile Dock", "handmade-art", "custom-gifts",
+        // 8. handmade-art
+        list.add(createSeedItem(29, "student_c", "Hand-Carved Wooden Pen Stand & Mobile Dock", "handmade-art", "custom-gifts",
                 "280.00", "550.00", "Handmade", "Picasso Block",
-                "Artisan polished sheesham wood pen organizer with integrated smartphone viewing notch. Handcrafted on campus.", "Campus Artisan", false));
-        list.add(createSeedItem(30, "student_a", "Minimalist Campus Skyline Charcoal Sketch (Framed)", "handmade-art", "paintings-sketches",
+                "Artisan polished sheesham wood pen organizer with integrated smartphone viewing notch. Handcrafted on campus.", "Campus Artisan", false,
+                "/assets/products/matcha_mug.jpg"));
+        list.add(createSeedItem(30, "student_j", "Minimalist Campus Skyline Charcoal Sketch (Framed)", "handmade-art", "paintings-sketches",
                 "450.00", "900.00", "Brand New", "Square One",
-                "Original black and white charcoal drawing of Chitkara university clock tower in a clean black wooden frame (A4).", "Original Art", false));
-        list.add(createSeedItem(31, "student_b", "Handcrafted Matcha Green Ceramic Coffee Mug", "handmade-art", "decor",
+                "Original black and white charcoal drawing of Chitkara university clock tower in a clean black wooden frame (A4).", "Original Art", false,
+                "/assets/products/tote_bag.jpg"));
+        list.add(createSeedItem(31, "student_c", "Handcrafted Matcha Green Ceramic Coffee Mug", "handmade-art", "decor",
                 "350.00", "699.00", "Handmade", "Square One",
-                "Hand-thrown ceramic pottery mug with earthy green glaze finish. Perfect for matcha, chai, or desk decor.", "Student Artisan", false));
-        list.add(createSeedItem(32, "student_b", "Handmade Daisy Floral Crochet Tote Bag", "handmade-art", "crochet-knitting",
+                "Hand-thrown ceramic pottery mug with earthy green glaze finish. Perfect for matcha, chai, or desk decor.", "Student Artisan", false,
+                "/assets/products/matcha_mug.jpg"));
+        list.add(createSeedItem(32, "student_f", "Handmade Daisy Floral Crochet Tote Bag", "handmade-art", "crochet-knitting",
                 "380.00", "750.00", "Handmade", "Gate No. 4",
-                "Custom crochet shoulder tote bag knit with premium soft milk cotton yarn in pastel cream and yellow daisy pattern.", "Hand Knitted", false));
+                "Custom crochet shoulder tote bag knit with premium soft milk cotton yarn in pastel cream and yellow daisy pattern.", "Hand Knitted", false,
+                "/assets/products/tote_bag.jpg"));
 
-        // 9. sports-fitness-cycles (2 Satkar, 2 Priya)
-        list.add(createSeedItem(33, "student_a", "Yonex Muscle Power 29 Light Badminton Racket", "sports-fitness-cycles", "racket-sports",
+        // 9. sports-fitness-cycles
+        list.add(createSeedItem(33, "student_i", "Yonex Muscle Power 29 Light Badminton Racket", "sports-fitness-cycles", "racket-sports",
                 "850.00", "1790.00", "Good", "Sports Complex",
-                "Lightweight isometric badminton racket strung at 24 lbs with new grip tape and full head cover. Great smash power.", "Tournament Ready", false));
-        list.add(createSeedItem(34, "student_a", "Rubber Coated Hex Dumbbells (5kg Pair)", "sports-fitness-cycles", "gym-fitness",
+                "Lightweight isometric badminton racket strung at 24 lbs with new grip tape and full head cover. Great smash power.", "Tournament Ready", false,
+                "/assets/products/arduino_kit.jpg"));
+        list.add(createSeedItem(34, "student_i", "Rubber Coated Hex Dumbbells (5kg Pair)", "sports-fitness-cycles", "gym-fitness",
                 "650.00", "1300.00", "Good", "Hostel Gate",
-                "Solid cast iron hexagonal dumbbells with non-slip chrome knurled handles. Floor friendly rubber coating.", "Hostel Workout", false));
-        list.add(createSeedItem(35, "student_b", "Nivia Storm Football (Size 5, Rubber)", "sports-fitness-cycles", "football-basketball",
+                "Solid cast iron hexagonal dumbbells with non-slip chrome knurled handles. Floor friendly rubber coating.", "Hostel Workout", false,
+                "/assets/products/graphing_calc.jpg"));
+        list.add(createSeedItem(35, "student_i", "Nivia Storm Football (Size 5, Rubber)", "sports-fitness-cycles", "football-basketball",
                 "390.00", "750.00", "Like New", "Sports Complex",
-                "All-weather durable rubber moulded football suitable for turf and grass grounds. Includes inflation pin.", "Match Ready", false));
-        list.add(createSeedItem(36, "student_b", "Anti-Skid High Density 6mm Yoga Mat with Strap", "sports-fitness-cycles", "yoga",
+                "All-weather durable rubber moulded football suitable for turf and grass grounds. Includes inflation pin.", "Match Ready", false,
+                "/assets/products/solid_perfume.jpg"));
+        list.add(createSeedItem(36, "student_l", "Anti-Skid High Density 6mm Yoga Mat with Strap", "sports-fitness-cycles", "yoga",
                 "420.00", "999.00", "Like New", "Square One",
-                "Eco-friendly textured EVA foam fitness mat with excellent cushioning and dual-sided grip. Includes carry strap.", "Fitness Pick", false));
+                "Eco-friendly textured EVA foam fitness mat with excellent cushioning and dual-sided grip. Includes carry strap.", "Fitness Pick", false,
+                "/assets/products/tote_bag.jpg"));
 
-        // 10. other (2 Satkar, 2 Priya)
-        list.add(createSeedItem(37, "student_a", "Heavy Duty 4-Digit Combination Cable Bike Lock", "other", "bicycles-accessories",
+        // 10. other
+        list.add(createSeedItem(37, "student_h", "Heavy Duty 4-Digit Combination Cable Bike Lock", "other", "bicycles-accessories",
                 "190.00", "450.00", "Like New", "Hostel Gate",
-                "Resettable combination steel cable lock for securing bicycles and hostel storage trunks. Weatherproof vinyl coating.", "Campus Security", false));
-        list.add(createSeedItem(38, "student_a", "Foldable Laptop Bed Table with Cup Holder", "other", null,
+                "Resettable combination steel cable lock for securing bicycles and hostel storage trunks. Weatherproof vinyl coating.", "Campus Security", false,
+                "/assets/products/arduino_kit.jpg"));
+        list.add(createSeedItem(38, "student_d", "Foldable Laptop Bed Table with Cup Holder", "other", null,
                 "360.00", "750.00", "Good", "Hostel Gate",
-                "Engineered wood portable desk tray with non-slip metal legs and tablet slot. Perfect for studying from hostel bed.", "Study Comfort", false));
-        list.add(createSeedItem(39, "student_b", "Compact 3-Fold UV Resistant Rain Umbrella", "other", null,
+                "Engineered wood portable desk tray with non-slip metal legs and tablet slot. Perfect for studying from hostel bed.", "Study Comfort", false,
+                "/assets/products/matcha_mug.jpg"));
+        list.add(createSeedItem(39, "student_e", "Compact 3-Fold UV Resistant Rain Umbrella", "other", null,
                 "220.00", "499.00", "Like New", "Square One",
-                "Windproof lightweight folding umbrella with black UV sun blocking coating. Fits easily inside college backpack.", "Monsoon Ready", false));
-        list.add(createSeedItem(40, "student_b", "Noise-Cancelling Memory Foam Earplugs (3 Pairs)", "other", null,
+                "Windproof lightweight folding umbrella with black UV sun blocking coating. Fits easily inside college backpack.", "Monsoon Ready", false,
+                "/assets/products/room_spray.jpg"));
+        list.add(createSeedItem(40, "student_l", "Noise-Cancelling Memory Foam Earplugs (3 Pairs)", "other", null,
                 "120.00", "280.00", "Brand New", "Library Entrance",
-                "High SNR 38dB slow rebound foam earplugs in compact hygiene cases. Ideal for exam revision in busy hostel rooms.", "Exam Focus", false));
+                "High SNR 38dB slow rebound foam earplugs in compact hygiene cases. Ideal for exam revision in busy hostel rooms.", "Exam Focus", false,
+                "/assets/products/solid_perfume.jpg"));
 
         return list;
     }
 
+    public static String getSellerNameForId(String sellerId) {
+        if (sellerId == null) return "Campus Student";
+        return switch (sellerId) {
+            case "student_a" -> "Satkar Singh";
+            case "student_b" -> "Priya K.";
+            case "student_c" -> "Nisha R.";
+            case "student_d" -> "Madhur T.";
+            case "student_e" -> "Charlie W.";
+            case "student_f" -> "Simran D.";
+            case "student_g" -> "Harsh P.";
+            case "student_h" -> "Aman V.";
+            case "student_i" -> "Rohan S.";
+            case "student_j" -> "Kavya M.";
+            case "student_k" -> "Ananya G.";
+            case "student_l" -> "Vikram B.";
+            case "admin_1" -> "Campus Admin";
+            default -> "Campus Student";
+        };
+    }
+
     private static Listing createSeedItem(long id, String sellerId, String title, String categoryId, String subcategoryId,
                                          String price, String origPrice, String condition, String spot,
-                                         String desc, String badge, boolean hasNotes) {
+                                         String desc, String badge, boolean hasNotes, String photoUrl) {
         Listing l = new Listing(id, sellerId, title, categoryId, new BigDecimal(price), condition, spot, desc);
         if (origPrice != null) l.setOriginalPrice(new BigDecimal(origPrice));
         l.setSubcategoryId(subcategoryId);
@@ -263,7 +323,10 @@ public class Listing {
         l.setHasNotes(hasNotes);
         l.setStatus("approved");
         l.setPendingType(null);
-        l.setSellerName("student_a".equals(sellerId) ? "Satkar Singh" : "Priya K.");
+        l.setSellerName(getSellerNameForId(sellerId));
+        if (photoUrl != null) {
+            l.setPhotos(new ArrayList<>(List.of(photoUrl)));
+        }
         return l;
     }
 }
