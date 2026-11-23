@@ -1,6 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { isAdmin as checkIsAdmin } from '../lib/permissions.js';
-import { getAppMode, setAppMode, APP_MODES } from '../lib/appMode.js';
 
 export default function Navbar({
   handleGoToLogin,
@@ -28,24 +27,8 @@ export default function Navbar({
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [isCartOpen, setIsCartOpen] = useState(false);
-  const [appMode, setLocalAppMode] = useState(getAppMode());
 
   const navActionsRef = useRef(null);
-
-  useEffect(() => {
-    function handleModeChange(e) {
-      setLocalAppMode(e.detail?.mode || getAppMode());
-    }
-    window.addEventListener('unimart:mode-change', handleModeChange);
-    return () => window.removeEventListener('unimart:mode-change', handleModeChange);
-  }, []);
-
-  const toggleMode = () => {
-    const next = appMode === APP_MODES.OFFLINE ? APP_MODES.INTEGRATED : APP_MODES.OFFLINE;
-    setAppMode(next);
-    setLocalAppMode(next);
-    window.location.reload();
-  };
 
   // Close all open popovers when clicking outside or pressing Escape
   useEffect(() => {
@@ -216,34 +199,6 @@ export default function Navbar({
           >
             <span className="material-symbols-outlined" style={{ fontSize: '19px' }}>add_circle</span>
             <span>Sell an Item</span>
-          </button>
-
-          {/* Mode Indicator & Switcher */}
-          <button
-            type="button"
-            className={`btn btn-sm d-flex align-items-center gap-1.5 px-2.5 py-1 rounded-pill ${
-              appMode === APP_MODES.OFFLINE
-                ? 'btn-outline-warning text-warning-emphasis bg-warning bg-opacity-10'
-                : 'btn-outline-success text-success-emphasis bg-success bg-opacity-10'
-            }`}
-            style={{ fontSize: '0.74rem', fontWeight: 600, border: '1px solid' }}
-            onClick={toggleMode}
-            title={
-              appMode === APP_MODES.OFFLINE
-                ? 'Click to switch to INTEGRATED DEMO (React + Java + MySQL)'
-                : 'Click to switch to OFFLINE DEMO (Browser storage only)'
-            }
-          >
-            <span
-              className="rounded-circle"
-              style={{
-                width: '8px',
-                height: '8px',
-                backgroundColor: appMode === APP_MODES.OFFLINE ? '#d97706' : '#10b981',
-                display: 'inline-block'
-              }}
-            />
-            <span>{appMode === APP_MODES.OFFLINE ? 'Offline Demo' : 'Integrated Demo'}</span>
           </button>
 
           {/* Dark/Light Theme Toggle Button */}

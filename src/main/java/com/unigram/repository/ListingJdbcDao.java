@@ -14,6 +14,41 @@ import java.util.Optional;
  */
 public class ListingJdbcDao {
 
+    public boolean existsById(Connection conn, long id) throws SQLException {
+        String sql = "SELECT 1 FROM listings WHERE id = ?";
+        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setLong(1, id);
+            try (ResultSet rs = stmt.executeQuery()) {
+                return rs.next();
+            }
+        }
+    }
+
+    public void insertWithId(Connection conn, Listing listing) throws SQLException {
+        String sql = "INSERT INTO listings (id, seller_id, title, category_id, subcategory_id, price, original_price, " +
+                "item_condition, meetup_spot, description, has_notes, badge, status, pending_type) " +
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) " +
+                "ON DUPLICATE KEY UPDATE title = VALUES(title), price = VALUES(price), status = VALUES(status), " +
+                "category_id = VALUES(category_id), item_condition = VALUES(item_condition)";
+        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setLong(1, listing.getId());
+            stmt.setString(2, listing.getSellerId());
+            stmt.setString(3, listing.getTitle());
+            stmt.setString(4, listing.getCategoryId());
+            stmt.setString(5, listing.getSubcategoryId());
+            stmt.setBigDecimal(6, listing.getPrice());
+            stmt.setBigDecimal(7, listing.getOriginalPrice());
+            stmt.setString(8, listing.getItemCondition());
+            stmt.setString(9, listing.getMeetupSpot());
+            stmt.setString(10, listing.getDescription());
+            stmt.setBoolean(11, listing.isHasNotes());
+            stmt.setString(12, listing.getBadge() != null ? listing.getBadge() : "Verified");
+            stmt.setString(13, listing.getStatus() != null ? listing.getStatus() : "approved");
+            stmt.setString(14, listing.getPendingType() != null ? listing.getPendingType() : "new");
+            stmt.executeUpdate();
+        }
+    }
+
     public long insert(Connection conn, Listing listing) throws SQLException {
         String sql = "INSERT INTO listings (seller_id, title, category_id, subcategory_id, price, original_price, " +
                 "item_condition, meetup_spot, description, has_notes, badge, status, pending_type) " +

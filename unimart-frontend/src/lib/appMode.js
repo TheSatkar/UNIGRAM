@@ -17,34 +17,17 @@ export const APP_MODES = {
 };
 
 export function getAppMode() {
-  try {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved === APP_MODES.OFFLINE) {
-      return APP_MODES.OFFLINE;
-    }
-  } catch {
-    // ignore
-  }
-  return APP_MODES.INTEGRATED; // Default for college presentations
+  return APP_MODES.INTEGRATED; // Integrated mode is permanent
 }
 
 export function setAppMode(mode) {
-  try {
-    if (mode === APP_MODES.OFFLINE) {
-      localStorage.setItem(STORAGE_KEY, APP_MODES.OFFLINE);
-    } else {
-      localStorage.setItem(STORAGE_KEY, APP_MODES.INTEGRATED);
-    }
-    window.dispatchEvent(new CustomEvent('unimart:mode-change', { detail: { mode } }));
-  } catch {
-    // ignore
-  }
+  // Mode toggle is disabled - always stays INTEGRATED
 }
 
 export function isIntegratedMode() {
-  return getAppMode() === APP_MODES.INTEGRATED;
+  return true;
 }
 
 export function isOfflineMode() {
-  return getAppMode() === APP_MODES.OFFLINE;
+  return false;
 }

@@ -12,6 +12,7 @@ import com.unigram.exception.UnauthorizedConversationAccessException;
 import com.unigram.exception.UniGramException;
 import com.unigram.exception.UserNotFoundException;
 import com.unigram.model.Conversation;
+import com.unigram.model.Listing;
 import com.unigram.model.Message;
 import com.unigram.model.ProductReference;
 import com.unigram.model.User;
@@ -154,21 +155,11 @@ public class Main {
                 userDao.insert(conn, new User("usr_student_B", "Maya Patel", "maya.patel@university.edu"));
             }
 
-            // 2. Seed marketplace product references
-            if (!productDao.existsById(conn, "1")) {
-                productDao.insert(conn, new ProductReference("1", "Calculus"));
-            }
-            if (!productDao.existsById(conn, "2")) {
-                productDao.insert(conn, new ProductReference("2", "Handcrafted Matcha Mug"));
-            }
-            if (!productDao.existsById(conn, "3")) {
-                productDao.insert(conn, new ProductReference("3", "Color Graphing Calculator"));
-            }
-            if (!productDao.existsById(conn, "4")) {
-                productDao.insert(conn, new ProductReference("4", "Botanical Room Spray: Cedar & Wild Lavender (50ml)"));
-            }
-            if (!productDao.existsById(conn, "5")) {
-                productDao.insert(conn, new ProductReference("5", "Organic Chemistry as a Second Language (Klein)"));
+            // 2. Seed marketplace product references for all 40 catalog listings
+            for (Listing l : Listing.createSeedCatalog()) {
+                if (!productDao.existsById(conn, String.valueOf(l.getId()))) {
+                    productDao.insert(conn, new ProductReference(String.valueOf(l.getId()), l.getTitle()));
+                }
             }
 
             // 3. Seed demo conversation for Product 5 (Organic Chemistry): Buyer=student_b (Priya), Seller=student_a (Satkar)

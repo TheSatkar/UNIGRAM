@@ -140,32 +140,19 @@ public class ApiRouter implements HttpHandler {
                     PasswordHasher.hashPassword("student123"));
             inMemoryChatService.registerUser(priya);
 
-            // Seed sample marketplace listings
-            Listing l1 = new Listing(1, "student_b", "Calculus", "books-notes", new BigDecimal("450.00"),
-                    "Like New", "Library Entrance", "Single Variable Calculus textbook with limits & integrals.");
-            l1.setOriginalPrice(new BigDecimal("1499.00"));
-            l1.setStatus("approved");
-            l1.setBadge("Academic Pick");
-            inMemoryStorage.saveListing(l1);
-
-            Listing l5 = new Listing(5, "student_a", "Organic Chemistry as a Second Language (Klein)", "books-notes", new BigDecimal("380.00"),
-                    "Good", "Library Entrance", "David Klein second edition with handwritten summary mind maps in margins.");
-            l5.setOriginalPrice(new BigDecimal("1100.00"));
-            l5.setStatus("approved");
-            l5.setHasNotes(true);
-            l5.setBadge("Semester Bestseller");
-            inMemoryStorage.saveListing(l5);
-
-            // Product references for messaging
-            inMemoryChatService.registerProduct(new ProductReference("5", "Organic Chemistry as a Second Language (Klein)"));
-            inMemoryChatService.registerProduct(new ProductReference("1", "Calculus"));
+            // Seed 40 marketplace listings across all 10 categories (2 Satkar, 2 Priya each)
+            List<Listing> seedCatalog = Listing.createSeedCatalog();
+            for (Listing l : seedCatalog) {
+                inMemoryStorage.saveListing(l);
+                inMemoryChatService.registerProduct(new ProductReference(String.valueOf(l.getId()), l.getTitle()));
+            }
 
             // Seed initial thread between Priya (buyer) and Satkar (seller)
-            Conversation c = inMemoryChatService.createConversation("student_b", "student_a", "5");
+            Conversation c = inMemoryChatService.createConversation("student_b", "student_a", "1");
             inMemoryMessageService.sendMessage(c.getConversationId(), "student_b",
-                    "Hi Satkar, is the Organic Chemistry book still available for meetup at Library Entrance?");
+                    "Hi Satkar, is the Data Structures textbook still available for meetup at Library Entrance?");
 
-            // If MySQL is active, seed the demo accounts to the database as well
+            // If MySQL is active, seed the demo accounts and catalog to the database as well
             if (isDatabaseAvailable()) {
                 try (Connection conn = DatabaseConnectionFactory.getConnection(config)) {
                     if (!userDao.existsById(conn, "admin_1")) {
@@ -176,6 +163,13 @@ public class ApiRouter implements HttpHandler {
                     }
                     if (!userDao.existsById(conn, "student_b")) {
                         userDao.insert(conn, priya);
+                    }
+                    ProductReferenceJdbcDao productDao = new ProductReferenceJdbcDao();
+                    for (Listing l : seedCatalog) {
+                        listingDao.insertWithId(conn, l);
+                        if (!productDao.existsById(conn, String.valueOf(l.getId()))) {
+                            productDao.insert(conn, new ProductReference(String.valueOf(l.getId()), l.getTitle()));
+                        }
                     }
                 } catch (Exception ignored) {}
             }
