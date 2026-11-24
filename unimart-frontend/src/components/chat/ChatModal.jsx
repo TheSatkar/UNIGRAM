@@ -15,6 +15,7 @@ export default function ChatModal() {
     sendMessage,
     toggleReaction,
     sending,
+    markAsRead,
     apiError
   } = useChat();
 
@@ -57,6 +58,13 @@ export default function ChatModal() {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }
   }, [activeConversation?.messages, isOpen, isMinimized, activeConversation?.id]);
+
+  // Mark active conversation as read as soon as it is viewed
+  useEffect(() => {
+    if (activeConversation?.id && isOpen && !isMinimized) {
+      markAsRead(activeConversation.id);
+    }
+  }, [activeConversation?.id, activeConversation?.messages?.length, isOpen, isMinimized, markAsRead]);
 
   if (!isOpen || isMinimized) {
     return null;

@@ -157,6 +157,23 @@ function resolveParticipant(otherUserId, roleLabel = 'Seller') {
   };
 }
 
+const loadStoredReadTimestamps = (userId) => {
+  if (!userId) return {};
+  try {
+    const raw = localStorage.getItem(`unimart_read_timestamps_${userId}`);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+};
+
+const persistStoredReadTimestamps = (userId, timestamps) => {
+  if (!userId) return;
+  try {
+    localStorage.setItem(`unimart_read_timestamps_${userId}`, JSON.stringify(timestamps));
+  } catch {}
+};
+
 export function ChatProvider({ children }) {
   const { user } = useAuth() || {};
   const currentUserId = user?.id || null;
@@ -172,6 +189,32 @@ export function ChatProvider({ children }) {
   const [sending, setSending] = useState(false);
   const [apiError, setApiError] = useState(null);
   const [backendConnected, setBackendConnected] = useState(false);
+
+  // Synchronization refs for live polling and unread management
+  const readTimestampsRef = useRef({});
+  const activeConversationIdRef = useRef(activeConversationId);
+  const isOpenRef = useRef(isOpen);
+  const isMinimizedRef = useRef(isMinimized);
+
+  useEffect(() => {
+    if (currentUserId) {
+      readTimestampsRef.current = loadStoredReadTimestamps(currentUserId);
+    } else {
+      readTimestampsRef.current = {};
+    }
+  }, [currentUserId]);
+
+  useEffect(() => {
+    activeConversationIdRef.current = activeConversationId;
+  }, [activeConversationId]);
+
+  useEffect(() => {
+    isOpenRef.current = isOpen;
+  }, [isOpen]);
+
+  useEffect(() => {
+    isMinimizedRef.current = isMinimized;
+  }, [isMinimized]);
 
   // Active conversation object
   const activeConversation = conversations.find((c) => c.id === activeConversationId) || (conversations.length > 0 ? conversations[0] : null);
@@ -228,9 +271,25 @@ export function ChatProvider({ children }) {
             uiMsgs = [];
           }
 
-          // Compute unread: if there are messages from the other user
+          // Compute unread: if there are messages from the other user that arrived after the conversation was read
           const lastMsg = uiMsgs.length > 0 ? uiMsgs[uiMsgs.length - 1] : null;
-          const unreadCount = lastMsg && lastMsg.sender !== 'user' ? 1 : 0;
+          const lastMsgTime = lastMsg && lastMsg.rawSentAt
+            ? new Date(lastMsg.rawSentAt).getTime()
+            : 0;
+
+          const isCurrentlyActive = isOpenRef.current && !isMinimizedRef.current && (activeConversationIdRef.current === jc.conversationId);
+          const lastReadTime = readTimestampsRef.current[jc.conversationId] || 0;
+
+          let unreadCount = 0;
+          if (isCurrentlyActive) {
+            unreadCount = 0;
+            if (lastMsgTime > lastReadTime) {
+              readTimestampsRef.current[jc.conversationId] = Math.max(lastMsgTime, Date.now());
+              persistStoredReadTimestamps(currentUserId, readTimestampsRef.current);
+            }
+          } else if (lastMsg && lastMsg.sender !== 'user') {
+            unreadCount = lastMsgTime > lastReadTime ? 1 : 0;
+          }
 
           return {
             id: jc.conversationId,
@@ -592,6 +651,14 @@ export function ChatProvider({ children }) {
   };
 
   const markAsRead = (convId) => {
+    if (!convId || !currentUserId) return;
+    const now = Date.now();
+    readTimestampsRef.current = {
+      ...readTimestampsRef.current,
+      [convId]: now
+    };
+    persistStoredReadTimestamps(currentUserId, readTimestampsRef.current);
+
     setConversations((prev) =>
       prev.map((c) => {
         if (c.id === convId && c.unreadCount > 0) {
@@ -813,6 +880,7 @@ export function ChatProvider({ children }) {
         closeChat,
         toggleChat,
         toggleMinimize,
+        markAsRead,
         sendMessage,
         toggleReaction,
         clearAllChats,
