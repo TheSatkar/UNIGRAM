@@ -1209,19 +1209,39 @@ public class ApiRouter implements HttpHandler {
             String cleanUserId = req.getUserId().trim();
             String cleanName = req.getFullName().trim();
             String cleanEmail = req.getEmail() != null ? req.getEmail().trim() : "";
-            User newUser = new User(cleanUserId, cleanName, cleanEmail);
+
+            User existing = inMemoryStorage.getUser(cleanUserId);
+            if (existing == null && !cleanEmail.isEmpty()) {
+                Optional<User> byEmail = inMemoryStorage.findUserByEmail(cleanEmail);
+                if (byEmail.isPresent()) existing = byEmail.get();
+            }
+
+            User userToSave;
+            if (existing != null) {
+                // Preserve security credentials, role, and student ID on sync
+                userToSave = new User(
+                        cleanUserId,
+                        cleanName,
+                        !cleanEmail.isEmpty() ? cleanEmail : existing.getEmail(),
+                        existing.getRole(),
+                        existing.getStudentId(),
+                        existing.getPasswordHash()
+                );
+            } else {
+                userToSave = new User(cleanUserId, cleanName, cleanEmail);
+            }
 
             try {
-                inMemoryChatService.registerUser(newUser);
+                inMemoryChatService.registerUser(userToSave);
             } catch (Exception ignored) {}
 
             if (isDatabaseAvailable()) {
                 try {
-                    jdbcChatService.registerUser(newUser);
+                    jdbcChatService.registerUser(userToSave);
                 } catch (Exception ignored) {}
             }
 
-            sendJson(exchange, 201, ApiResponse.created(newUser));
+            sendJson(exchange, 201, ApiResponse.created(userToSave));
         } else {
             sendMethodNotAllowed(exchange, "GET, POST, OPTIONS");
         }

@@ -138,19 +138,19 @@ public class Main {
 
             // 1. Seed demo student accounts
             List<User> demoUsers = List.of(
-                    new User("admin_1", "Campus Admin", "admin@chitkara.edu.in"),
-                    new User("student_a", "Satkar Singh", "satkar0696.becse25@chitkara.edu.in"),
-                    new User("student_b", "Priya K.", "priya.k@chitkara.edu.in"),
-                    new User("student_c", "Nisha R.", "nisha.r@chitkara.edu.in"),
-                    new User("student_d", "Madhur T.", "madhur.t@chitkara.edu.in"),
-                    new User("student_e", "Charlie W.", "charlie.w@chitkara.edu.in"),
-                    new User("student_f", "Simran D.", "simran.d@chitkara.edu.in"),
-                    new User("student_g", "Harsh P.", "harsh.p@chitkara.edu.in"),
-                    new User("student_h", "Aman V.", "aman.v@chitkara.edu.in"),
-                    new User("student_i", "Rohan S.", "rohan.s@chitkara.edu.in"),
-                    new User("student_j", "Kavya M.", "kavya.m@chitkara.edu.in"),
-                    new User("student_k", "Ananya G.", "ananya.g@chitkara.edu.in"),
-                    new User("student_l", "Vikram B.", "vikram.b@chitkara.edu.in"),
+                    new User("admin_1", "Campus Admin", "admin@chitkara.edu.in", "admin", "ADMIN-001", com.unigram.security.PasswordHasher.hashPassword("Unimart@123")),
+                    new User("student_a", "Satkar Singh", "satkar0696.becse25@chitkara.edu.in", "student", "2110990696", com.unigram.security.PasswordHasher.hashPassword("student123")),
+                    new User("student_b", "Priya K.", "priya.k@chitkara.edu.in", "student", "2110990697", com.unigram.security.PasswordHasher.hashPassword("student123")),
+                    new User("student_c", "Nisha R.", "nisha.r@chitkara.edu.in", "student", "2110990698", com.unigram.security.PasswordHasher.hashPassword("student123")),
+                    new User("student_d", "Madhur T.", "madhur.t@chitkara.edu.in", "student", "2110990699", com.unigram.security.PasswordHasher.hashPassword("student123")),
+                    new User("student_e", "Charlie W.", "charlie.w@chitkara.edu.in", "student", "2110990700", com.unigram.security.PasswordHasher.hashPassword("student123")),
+                    new User("student_f", "Simran D.", "simran.d@chitkara.edu.in", "student", "2110990701", com.unigram.security.PasswordHasher.hashPassword("student123")),
+                    new User("student_g", "Harsh P.", "harsh.p@chitkara.edu.in", "student", "2110990702", com.unigram.security.PasswordHasher.hashPassword("student123")),
+                    new User("student_h", "Aman V.", "aman.v@chitkara.edu.in", "student", "2110990703", com.unigram.security.PasswordHasher.hashPassword("student123")),
+                    new User("student_i", "Rohan S.", "rohan.s@chitkara.edu.in", "student", "2110990704", com.unigram.security.PasswordHasher.hashPassword("student123")),
+                    new User("student_j", "Kavya M.", "kavya.m@chitkara.edu.in", "student", "2110990705", com.unigram.security.PasswordHasher.hashPassword("student123")),
+                    new User("student_k", "Ananya G.", "ananya.g@chitkara.edu.in", "student", "2110990706", com.unigram.security.PasswordHasher.hashPassword("student123")),
+                    new User("student_l", "Vikram B.", "vikram.b@chitkara.edu.in", "student", "2110990707", com.unigram.security.PasswordHasher.hashPassword("student123")),
                     new User("usr_student_A", "Alex Chen", "alex.chen@university.edu"),
                     new User("usr_student_B", "Maya Patel", "maya.patel@university.edu")
             );
