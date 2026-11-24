@@ -40,7 +40,13 @@ public class DatabaseConnectionFactory {
         config.validate();
 
         try {
-            return DriverManager.getConnection(config.getUrl(), config.getUser(), config.getPassword());
+            DriverManager.setLoginTimeout(3);
+            String url = config.getUrl();
+            if (url != null && !url.contains("connectTimeout=")) {
+                String separator = url.contains("?") ? "&" : "?";
+                url = url + separator + "connectTimeout=3000&socketTimeout=5000";
+            }
+            return DriverManager.getConnection(url, config.getUser(), config.getPassword());
         } catch (SQLException e) {
             String sanitizedMessage = sanitizeSqlExceptionMessage(e.getMessage(), config);
             throw new DatabaseException("Failed to establish JDBC Connection: " + sanitizedMessage, e);
@@ -58,16 +64,19 @@ public class DatabaseConnectionFactory {
         if (config == null || !config.isConfigured()) {
             return false;
         }
-        try (Connection conn = getConnection(config)) {
-            return conn.isValid(timeoutSeconds);
+        try {
+            DriverManager.setLoginTimeout(Math.max(1, timeoutSeconds));
+            try (Connection conn = getConnection(config)) {
+                return conn != null && conn.isValid(timeoutSeconds);
+            }
         } catch (Exception e) {
             return false;
         }
     }
 
-    private static String sanitizeSqlExceptionMessage(String msg, DatabaseConfig config) {
+    public static String sanitizeSqlExceptionMessage(String msg, DatabaseConfig config) {
         if (msg == null) return "Unknown SQL error.";
-        if (config.getPassword() != null && !config.getPassword().isEmpty()) {
+        if (config != null && config.getPassword() != null && !config.getPassword().isEmpty()) {
             return msg.replace(config.getPassword(), "********");
         }
         return msg;

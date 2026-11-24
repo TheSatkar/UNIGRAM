@@ -72,7 +72,7 @@ echo [PASS] Java backend compiled successfully.
 :: 3. Free port 8080 if an old instance is running, then start server
 echo.
 echo [3/5] Starting Uni-Gram Java server on port 8080...
-powershell -NoProfile -Command "try { $p = (Get-NetTCPConnection -LocalPort 8080 -ErrorAction SilentlyContinue).OwningProcess; if ($p) { Stop-Process -Id $p -Force -ErrorAction SilentlyContinue; Start-Sleep -Milliseconds 500 } } catch {}" >nul 2>&1
+powershell -NoProfile -Command "try { Get-NetTCPConnection -LocalPort 8080 -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique | ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue }; Start-Sleep -Milliseconds 500 } catch {}" >nul 2>&1
 
 start "Uni-Gram Java Backend" cmd /k java -cp "bin;lib/*" com.unigram.Main --server
 
@@ -84,7 +84,7 @@ set RETRIES=0
 
 :wait_backend
 set /a RETRIES+=1
-powershell -NoProfile -Command "$r = try { Invoke-RestMethod -Uri 'http://127.0.0.1:8080/api/health' -TimeoutSec 1 } catch { $null }; if ($r -and $r.status -eq 'success') { if ($r.data.database -eq 'CONNECTED') { exit 0 } else { exit 2 } } else { exit 1 }"
+powershell -NoProfile -Command "$r = try { Invoke-RestMethod -Uri 'http://127.0.0.1:8080/api/health' -TimeoutSec 1 } catch { $null }; if ($r -and ($r.success -eq $true -or $r.data.status -eq 'UP')) { if ($r.data.database -eq 'CONNECTED') { exit 0 } else { exit 2 } } else { exit 1 }"
 set B_STATUS=%ERRORLEVEL%
 if %B_STATUS% equ 0 (
   set BACKEND_UP=1
@@ -136,7 +136,7 @@ set F_RETRIES=0
 
 :wait_frontend
 set /a F_RETRIES+=1
-powershell -NoProfile -Command "try { $r = Invoke-WebRequest -Uri 'http://localhost:5173' -UseBasicParsing -TimeoutSec 1; if ($r.StatusCode -eq 200) { exit 0 } else { exit 1 } } catch { exit 1 }"
+powershell -NoProfile -Command "$ProgressPreference='SilentlyContinue'; $r = try { Invoke-WebRequest -Uri 'http://127.0.0.1:5173' -UseBasicParsing -TimeoutSec 1 } catch { try { Invoke-WebRequest -Uri 'http://localhost:5173' -UseBasicParsing -TimeoutSec 1 } catch { $null } }; if ($r -and $r.StatusCode -eq 200) { exit 0 } else { exit 1 }"
 if not errorlevel 1 (
   set FRONTEND_UP=1
   goto frontend_done

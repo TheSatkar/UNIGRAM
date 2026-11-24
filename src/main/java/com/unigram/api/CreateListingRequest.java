@@ -5,8 +5,10 @@ import java.util.List;
 
 public class CreateListingRequest {
     private String title;
+    private String category;
     private String category_id;
     private String categoryId;
+    private String subCategory;
     private String subcategory_id;
     private String subcategoryId;
     private BigDecimal price;
@@ -15,6 +17,7 @@ public class CreateListingRequest {
     private String item_condition;
     private String condition;
     private String meetup_spot;
+    private String meetupSpot;
     private String notes;
     private String description;
     private Boolean has_notes;
@@ -26,16 +29,22 @@ public class CreateListingRequest {
     public void setTitle(String title) { this.title = title; }
 
     public String getCategoryId() {
-        return categoryId != null ? categoryId : category_id;
+        if (categoryId != null) return categoryId;
+        if (category_id != null) return category_id;
+        return category;
     }
     public void setCategoryId(String categoryId) { this.categoryId = categoryId; }
     public void setCategory_id(String category_id) { this.category_id = category_id; }
+    public void setCategory(String category) { this.category = category; }
 
     public String getSubcategoryId() {
-        return subcategoryId != null ? subcategoryId : subcategory_id;
+        if (subcategoryId != null) return subcategoryId;
+        if (subcategory_id != null) return subcategory_id;
+        return subCategory;
     }
     public void setSubcategoryId(String subcategoryId) { this.subcategoryId = subcategoryId; }
     public void setSubcategory_id(String subcategory_id) { this.subcategory_id = subcategory_id; }
+    public void setSubCategory(String subCategory) { this.subCategory = subCategory; }
 
     public BigDecimal getPrice() { return price; }
     public void setPrice(BigDecimal price) { this.price = price; }

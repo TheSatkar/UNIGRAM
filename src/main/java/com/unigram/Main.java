@@ -104,7 +104,6 @@ public class Main {
         System.out.println("           Uni-Gram — Standalone Java HTTP REST API Server            ");
         System.out.println("======================================================================\n");
         DatabaseConfig config = new DatabaseConfig();
-        seedDatabaseDirect(config);
 
         UniGramHttpServer server = new UniGramHttpServer(config);
         try {
@@ -112,6 +111,11 @@ public class Main {
             System.out.println("[+] Uni-Gram HTTP Server active at: " + server.getBaseUrl());
             System.out.println("    Endpoints: /api/health, /api/users, /api/products, /api/conversations");
             System.out.println("    Press Ctrl+C to terminate server.\n");
+
+            // Seed database after server is listening so startup is never delayed or blocked
+            if (config.isConfigured()) {
+                seedDatabaseDirect(config);
+            }
 
             Runtime.getRuntime().addShutdownHook(new Thread(() -> {
                 System.out.println("\n[!] Shutting down Uni-Gram HTTP Server...");
@@ -190,7 +194,8 @@ public class Main {
             }
 
         } catch (Exception e) {
-            System.out.println("[!] Notice during database seeding: " + e.getMessage());
+            String sanitized = DatabaseConnectionFactory.sanitizeSqlExceptionMessage(e.getMessage(), dbConfig);
+            System.out.println("[!] Notice during database seeding: " + sanitized);
         }
     }
 

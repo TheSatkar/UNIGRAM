@@ -32,17 +32,34 @@ public class DatabaseConfig {
     }
 
     private static String resolveConfig(String envKey) {
-        String val = System.getenv(envKey);
-        if (val != null && !val.trim().isEmpty()) {
-            return val.trim();
+        // Priority 1: Check .env file so existing environment variables do not override it
+        String envFileVal = readFromEnvFile(envKey);
+        if (envFileVal != null && !envFileVal.trim().isEmpty()) {
+            return envFileVal.trim();
         }
-        val = System.getProperty(envKey);
-        if (val != null && !val.trim().isEmpty()) {
-            return val.trim();
+
+        // Priority 2: System properties (-Dkey=value)
+        String propVal = System.getProperty(envKey);
+        if (propVal != null && !propVal.trim().isEmpty()) {
+            return propVal.trim();
         }
-        // Check .env file in current working directory
-        try {
-            java.io.File envFile = new java.io.File(".env");
+
+        // Priority 3: System environment variables
+        String sysEnvVal = System.getenv(envKey);
+        if (sysEnvVal != null && !sysEnvVal.trim().isEmpty()) {
+            return sysEnvVal.trim();
+        }
+
+        return null;
+    }
+
+    private static String readFromEnvFile(String envKey) {
+        java.io.File[] candidates = new java.io.File[] {
+            new java.io.File(".env"),
+            new java.io.File(System.getProperty("user.dir", "."), ".env"),
+            new java.io.File(System.getProperty("user.dir", "."), "../.env")
+        };
+        for (java.io.File envFile : candidates) {
             if (envFile.exists() && envFile.isFile()) {
                 try (java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.FileReader(envFile))) {
                     String line;
@@ -53,12 +70,15 @@ public class DatabaseConfig {
                         String k = line.substring(0, idx).trim();
                         String v = line.substring(idx + 1).trim();
                         if (k.equals(envKey)) {
+                            if ((v.startsWith("\"") && v.endsWith("\"")) || (v.startsWith("'") && v.endsWith("'"))) {
+                                v = v.substring(1, v.length() - 1);
+                            }
                             return v;
                         }
                     }
-                }
+                } catch (Exception ignored) {}
             }
-        } catch (Exception ignored) {}
+        }
         return null;
     }
 
