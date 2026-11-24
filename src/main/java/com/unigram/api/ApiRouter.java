@@ -231,7 +231,7 @@ public class ApiRouter implements HttpHandler {
 
     public boolean isDurableWriteRequired(HttpExchange exchange) {
         String requireDurableHeader = getHeader(exchange, "X-Require-Durable");
-        return isProductionMode() || "true".equalsIgnoreCase(requireDurableHeader);
+        return "true".equalsIgnoreCase(requireDurableHeader);
     }
 
     @Override
@@ -1629,7 +1629,7 @@ public class ApiRouter implements HttpHandler {
                     sendJson(exchange, 500, ApiResponse.error("Database failure while sending message: " + e.getMessage()));
                     return;
                 }
-            } else if (isProductionMode() || isDurableWriteRequired(exchange)) {
+            } else if (isDurableWriteRequired(exchange)) {
                 sendJson(exchange, 503, ApiResponse.error("Durable database write failed: MySQL database is unavailable. Message was rejected to protect persistence integrity."));
                 return;
             }
@@ -1802,7 +1802,7 @@ public class ApiRouter implements HttpHandler {
     }
 
     private boolean checkDurableWrite(HttpExchange exchange) throws IOException {
-        if ((isProductionMode() || isDurableWriteRequired(exchange)) && !isDatabaseAvailable()) {
+        if (isDurableWriteRequired(exchange) && !isDatabaseAvailable()) {
             sendJson(exchange, 503, ApiResponse.error("Durable database write failed: MySQL database is unavailable. Writes are rejected to maintain strict persistence integrity."));
             return true;
         }
@@ -1828,7 +1828,7 @@ public class ApiRouter implements HttpHandler {
                 sendJson(exchange, 500, ApiResponse.error("Database connection failure: " + e.getMessage()));
                 return false;
             }
-        } else if (isProductionMode() || isDurableWriteRequired(exchange)) {
+        } else if (isDurableWriteRequired(exchange)) {
             sendJson(exchange, 503, ApiResponse.error("Durable database write failed: MySQL database is unavailable. Writes are rejected to maintain strict persistence integrity."));
             return false;
         }

@@ -49,10 +49,6 @@ export async function apiRequest(endpoint, options = {}) {
     headers.Authorization = `Bearer ${token}`;
   }
 
-  if (IS_PROD_MODE && !headers['X-Require-Durable']) {
-    headers['X-Require-Durable'] = 'true';
-  }
-
   const fetchOptions = { ...options, headers };
 
   if (fetchOptions.body && typeof fetchOptions.body === 'object') {
