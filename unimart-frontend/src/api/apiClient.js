@@ -49,7 +49,7 @@ export async function apiRequest(endpoint, options = {}) {
     headers.Authorization = `Bearer ${token}`;
   }
 
-  if ((IS_PROD_MODE || isIntegratedMode()) && !headers['X-Require-Durable']) {
+  if (IS_PROD_MODE && !headers['X-Require-Durable']) {
     headers['X-Require-Durable'] = 'true';
   }
 
