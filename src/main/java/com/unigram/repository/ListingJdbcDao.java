@@ -24,12 +24,22 @@ public class ListingJdbcDao {
         }
     }
 
+    public int count(Connection conn) throws SQLException {
+        String sql = "SELECT COUNT(*) FROM listings";
+        try (PreparedStatement stmt = conn.prepareStatement(sql);
+             ResultSet rs = stmt.executeQuery()) {
+            if (rs.next()) {
+                return rs.getInt(1);
+            }
+            return 0;
+        }
+    }
+
     public void insertWithId(Connection conn, Listing listing) throws SQLException {
         String sql = "INSERT INTO listings (id, seller_id, title, category_id, subcategory_id, price, original_price, " +
                 "item_condition, meetup_spot, description, has_notes, badge, status, pending_type) " +
                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) " +
-                "ON DUPLICATE KEY UPDATE title = VALUES(title), price = VALUES(price), status = VALUES(status), " +
-                "category_id = VALUES(category_id), item_condition = VALUES(item_condition)";
+                "ON DUPLICATE KEY UPDATE id = id";
         try (PreparedStatement stmt = conn.prepareStatement(sql)) {
             stmt.setLong(1, listing.getId());
             stmt.setString(2, listing.getSellerId());

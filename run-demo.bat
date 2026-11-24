@@ -84,7 +84,7 @@ set RETRIES=0
 
 :wait_backend
 set /a RETRIES+=1
-powershell -NoProfile -Command "$r = try { Invoke-RestMethod -Uri 'http://127.0.0.1:8080/api/health' -TimeoutSec 1 } catch { $null }; if ($r -and ($r.success -eq $true -or $r.data.status -eq 'UP')) { if ($r.data.database -eq 'CONNECTED') { exit 0 } else { exit 2 } } else { exit 1 }"
+powershell -NoProfile -Command "$r = try { Invoke-RestMethod -Uri 'http://127.0.0.1:8080/api/health' -TimeoutSec 1 } catch { $null }; if ($r -and ($r.success -eq $true -or $r.data.status -eq 'UP') -and $r.data.initialized -eq $true) { if ($r.data.database -eq 'CONNECTED') { exit 0 } else { exit 2 } } else { exit 1 }"
 set B_STATUS=%ERRORLEVEL%
 if %B_STATUS% equ 0 (
   set BACKEND_UP=1

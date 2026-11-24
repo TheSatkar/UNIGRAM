@@ -36,6 +36,7 @@ import java.math.BigDecimal;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
+import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -69,6 +70,7 @@ public class ApiRouter implements HttpHandler {
     private final InMemoryStorage inMemoryStorage;
     private final ChatService inMemoryChatService;
     private final MessageService inMemoryMessageService;
+    private volatile boolean initialized = false;
 
     public ApiRouter(DatabaseConfig config, JdbcChatService chatService, JdbcMessageService messageService, CorsConfig corsConfig) {
         if (config == null) {
@@ -161,31 +163,39 @@ public class ApiRouter implements HttpHandler {
             inMemoryMessageService.sendMessage(c3.getConversationId(), "student_a",
                     "Hi Priya! Is your Calculus textbook still available?");
 
-            // If MySQL is active, seed the demo accounts and catalog to the database as well
+            // If MySQL is active, seed demo accounts and catalog to the database as well (idempotently)
             if (isDatabaseAvailable()) {
                 try (Connection conn = DatabaseConnectionFactory.getConnection(config)) {
+                    // 1. Ensure demo student accounts exist in MySQL without overwriting
                     for (User u : demoUsers) {
                         if (!userDao.existsById(conn, u.getUserId())) {
                             userDao.insert(conn, u);
                         }
                     }
-                    ProductReferenceJdbcDao productDao = new ProductReferenceJdbcDao();
-                    for (Listing l : seedCatalog) {
-                        listingDao.insertWithId(conn, l);
-                        if (!productDao.existsById(conn, String.valueOf(l.getId()))) {
-                            productDao.insert(conn, new ProductReference(String.valueOf(l.getId()), l.getTitle()));
-                        }
-                        if (l.getPhotos() != null && !l.getPhotos().isEmpty()) {
-                            List<String> existingPhotos = listingDao.findPhotosByListingId(conn, l.getId());
-                            if (existingPhotos.isEmpty()) {
-                                for (int i = 0; i < l.getPhotos().size(); i++) {
-                                    listingDao.insertPhoto(conn, l.getId(), l.getPhotos().get(i), i);
+
+                    // 2. Safe one-time legacy migration for seed records 1..40 only
+                    migrateLegacySeedOwners(conn, seedCatalog);
+
+                    // 3. Only seed the marketplace catalog if the database table is completely unseeded
+                    if (listingDao.count(conn) == 0) {
+                        ProductReferenceJdbcDao productDao = new ProductReferenceJdbcDao();
+                        for (Listing l : seedCatalog) {
+                            listingDao.insertWithId(conn, l);
+                            if (!productDao.existsById(conn, String.valueOf(l.getId()))) {
+                                productDao.insert(conn, new ProductReference(String.valueOf(l.getId()), l.getTitle()));
+                            }
+                            if (l.getPhotos() != null && !l.getPhotos().isEmpty()) {
+                                List<String> existingPhotos = listingDao.findPhotosByListingId(conn, l.getId());
+                                if (existingPhotos.isEmpty()) {
+                                    for (int i = 0; i < l.getPhotos().size(); i++) {
+                                        listingDao.insertPhoto(conn, l.getId(), l.getPhotos().get(i), i);
+                                    }
                                 }
                             }
                         }
                     }
 
-                    // Seed demo conversations in MySQL
+                    // 4. Seed demo conversations only if not already present
                     ConversationJdbcDao convDao = new ConversationJdbcDao();
                     MessageJdbcDao messageDao = new MessageJdbcDao();
                     Optional<Conversation> dsConv = convDao.findByParticipantsAndProduct(conn, "student_b", "student_a", "1");
@@ -203,9 +213,30 @@ public class ApiRouter implements HttpHandler {
                         messageDao.insert(conn, new Message("msg_calc_01", convId, "student_a",
                                 "Hi Priya! Is your Calculus textbook still available?", LocalDateTime.now().minusMinutes(90)));
                     }
+
+                    // 5. Populate inMemoryStorage from MySQL so in-memory cache mirrors DB
+                    List<Listing> dbListings = listingDao.findAll(conn);
+                    for (Listing l : dbListings) {
+                        inMemoryStorage.saveListing(l);
+                    }
                 } catch (Exception ignored) {}
             }
-        } catch (Exception ignored) {}
+        } catch (Exception ignored) {
+        } finally {
+            initialized = true;
+        }
+    }
+
+    private void migrateLegacySeedOwners(Connection conn, List<Listing> seedCatalog) {
+        String updateSql = "UPDATE listings SET seller_id = ? WHERE id = ? AND seller_id != ?";
+        try (PreparedStatement stmt = conn.prepareStatement(updateSql)) {
+            for (Listing l : seedCatalog) {
+                stmt.setString(1, l.getSellerId());
+                stmt.setLong(2, l.getId());
+                stmt.setString(3, l.getSellerId());
+                stmt.executeUpdate();
+            }
+        } catch (SQLException ignored) {}
     }
 
     public boolean isDatabaseAvailable() {
@@ -311,9 +342,9 @@ public class ApiRouter implements HttpHandler {
         }
 
         if (isDatabaseAvailable()) {
-            sendJson(exchange, 200, ApiResponse.ok(new HealthResponse("UP", "CONNECTED", "1.0.0")));
+            sendJson(exchange, 200, ApiResponse.ok(new HealthResponse("UP", "CONNECTED", "1.0.0", initialized)));
         } else {
-            sendJson(exchange, 200, ApiResponse.ok(new HealthResponse("UP", "IN_MEMORY_PERSISTENCE", "1.0.0")));
+            sendJson(exchange, 200, ApiResponse.ok(new HealthResponse("UP", "IN_MEMORY_PERSISTENCE", "1.0.0", initialized)));
         }
     }
 

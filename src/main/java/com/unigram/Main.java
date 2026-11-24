@@ -112,11 +112,6 @@ public class Main {
             System.out.println("    Endpoints: /api/health, /api/users, /api/products, /api/conversations");
             System.out.println("    Press Ctrl+C to terminate server.\n");
 
-            // Seed database after server is listening so startup is never delayed or blocked
-            if (config.isConfigured()) {
-                seedDatabaseDirect(config);
-            }
-
             Runtime.getRuntime().addShutdownHook(new Thread(() -> {
                 System.out.println("\n[!] Shutting down Uni-Gram HTTP Server...");
                 server.stop(1);

@@ -9,12 +9,18 @@ public class HealthResponse {
     private final String database;
     private final String persistenceStatus;
     private final String apiVersion;
+    private final boolean initialized;
 
-    public HealthResponse(String status, String database, String apiVersion) {
+    public HealthResponse(String status, String database, String apiVersion, boolean initialized) {
         this.status = status;
         this.database = database;
         this.persistenceStatus = "CONNECTED".equalsIgnoreCase(database) ? "MYSQL_DURABLE" : "DEMO_EPHEMERAL";
         this.apiVersion = apiVersion;
+        this.initialized = initialized;
+    }
+
+    public HealthResponse(String status, String database, String apiVersion) {
+        this(status, database, apiVersion, true);
     }
 
     public String getStatus() {
@@ -31,5 +37,9 @@ public class HealthResponse {
 
     public String getApiVersion() {
         return apiVersion;
+    }
+
+    public boolean isInitialized() {
+        return initialized;
     }
 }
