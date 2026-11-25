@@ -30,36 +30,45 @@ public class Conversation {
             throw new IllegalArgumentException("Conversation ID cannot be null or empty.");
         }
         if (buyerId == null || buyerId.trim().isEmpty()) {
-            throw new IllegalArgumentException("Buyer ID cannot be null or empty.");
+            throw new IllegalArgumentException("Initiating student ID cannot be null or empty.");
         }
         if (sellerId == null || sellerId.trim().isEmpty()) {
-            throw new IllegalArgumentException("Seller ID cannot be null or empty.");
+            throw new IllegalArgumentException("Recipient student ID cannot be null or empty.");
         }
         if (buyerId.trim().equalsIgnoreCase(sellerId.trim())) {
             throw new IllegalArgumentException("A user cannot start a conversation with themselves (buyer and seller cannot be identical).");
-        }
-        if (productId == null || productId.trim().isEmpty()) {
-            throw new IllegalArgumentException("Product ID cannot be null or empty.");
         }
 
         this.conversationId = conversationId.trim();
         this.buyerId = buyerId.trim();
         this.sellerId = sellerId.trim();
-        this.productId = productId.trim();
+        this.productId = (productId != null && !productId.trim().isEmpty()) ? productId.trim() : null;
         this.createdAt = createdAt != null ? createdAt : LocalDateTime.now();
     }
 
     /**
-     * Overloaded constructor that automatically assigns the current timestamp.
-     * Demonstrates constructor chaining using 'this(...)'.
-     *
-     * @param conversationId unique conversation identifier
-     * @param buyerId        unique user ID of the buyer
-     * @param sellerId       unique user ID of the seller
-     * @param productId      unique product/listing ID
+     * Overloaded constructor for product-referenced conversations with automatic timestamp.
      */
     public Conversation(String conversationId, String buyerId, String sellerId, String productId) {
         this(conversationId, buyerId, sellerId, productId, LocalDateTime.now());
+    }
+
+    /**
+     * Overloaded constructor for direct student-to-student conversations with explicit timestamp.
+     */
+    public Conversation(String conversationId, String participantOneId, String participantTwoId, LocalDateTime createdAt) {
+        this(conversationId, participantOneId, participantTwoId, null, createdAt);
+    }
+
+    /**
+     * Overloaded constructor for direct student-to-student conversations with automatic timestamp.
+     */
+    public Conversation(String conversationId, String participantOneId, String participantTwoId) {
+        this(conversationId, participantOneId, participantTwoId, null, LocalDateTime.now());
+    }
+
+    public boolean isDirectConversation() {
+        return this.productId == null;
     }
 
     // Getters

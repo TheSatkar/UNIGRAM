@@ -23,7 +23,11 @@ public class ConversationJdbcDao {
             stmt.setString(1, conv.getConversationId());
             stmt.setString(2, conv.getBuyerId());
             stmt.setString(3, conv.getSellerId());
-            stmt.setString(4, conv.getProductId());
+            if (conv.getProductId() != null) {
+                stmt.setString(4, conv.getProductId());
+            } else {
+                stmt.setNull(4, java.sql.Types.VARCHAR);
+            }
             stmt.setTimestamp(5, Timestamp.valueOf(conv.getCreatedAt()));
             return stmt.executeUpdate() > 0;
         }
@@ -70,6 +74,25 @@ public class ConversationJdbcDao {
             stmt.setString(3, sellerId);
             stmt.setString(4, sellerId);
             stmt.setString(5, buyerId);
+            try (ResultSet rs = stmt.executeQuery()) {
+                if (rs.next()) {
+                    return Optional.of(mapRowToConversation(rs));
+                }
+            }
+        }
+        return Optional.empty();
+    }
+
+    public Optional<Conversation> findDirectByParticipants(Connection conn, String userOneId, String userTwoId) throws SQLException {
+        String sql = "SELECT conversation_id, buyer_id, seller_id, product_id, created_at " +
+                     "FROM conversations WHERE product_id IS NULL " +
+                     "AND ((buyer_id = ? AND seller_id = ?) OR (buyer_id = ? AND seller_id = ?)) " +
+                     "ORDER BY created_at ASC LIMIT 1";
+        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setString(1, userOneId);
+            stmt.setString(2, userTwoId);
+            stmt.setString(3, userTwoId);
+            stmt.setString(4, userOneId);
             try (ResultSet rs = stmt.executeQuery()) {
                 if (rs.next()) {
                     return Optional.of(mapRowToConversation(rs));

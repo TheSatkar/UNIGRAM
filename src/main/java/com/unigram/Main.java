@@ -93,6 +93,12 @@ public class Main {
 
         Main app = new Main(chatService, messageService, scanner);
         app.seedInitialData();
+
+        if (args != null && args.length > 0 && ("--academic".equalsIgnoreCase(args[0]) || "-a".equalsIgnoreCase(args[0]))) {
+            app.startAcademicSession();
+            return;
+        }
+
         app.startInteractiveSession();
     }
 
@@ -156,6 +162,11 @@ public class Main {
             for (User u : demoUsers) {
                 if (!userDao.existsById(conn, u.getUserId())) {
                     userDao.insert(conn, u);
+                } else if (u.getPasswordHash() != null && !u.getPasswordHash().trim().isEmpty()) {
+                    Optional<User> existing = userDao.findById(conn, u.getUserId());
+                    if (existing.isPresent() && (existing.get().getPasswordHash() == null || existing.get().getPasswordHash().trim().isEmpty())) {
+                        userDao.updatePassword(conn, u.getUserId(), u.getPasswordHash());
+                    }
                 }
             }
 
@@ -240,13 +251,9 @@ public class Main {
     private boolean checkDatabaseOrWarn() {
         if (!databaseConfig.isConfigured()) {
             System.out.println("----------------------------------------------------------------------");
-            System.out.println("[!] NOTICE: MySQL Database is not configured or reachable.");
-            System.out.println("Normal application messaging operations require a connected database.");
-            System.out.println("To configure, set the following environment variables in your shell:");
-            System.out.println("  $env:UNIGRAM_DB_URL = \"jdbc:mysql://localhost:3306/unigram_db?serverTimezone=UTC\"");
-            System.out.println("  $env:UNIGRAM_DB_USER = \"root\"");
-            System.out.println("  $env:UNIGRAM_DB_PASSWORD = \"<your-mysql-password>\"");
-            System.out.println("Use Option 12 to test the connection or run demonstrations.");
+            System.out.println("[!] NOTICE: Database connection is not configured.");
+            System.out.println("Please ensure MySQL is running and your .env or environment variables");
+            System.out.println("are configured (UNIGRAM_DB_URL, UNIGRAM_DB_USER, UNIGRAM_DB_PASSWORD).");
             System.out.println("----------------------------------------------------------------------\n");
             return false;
         }
@@ -268,14 +275,15 @@ public class Main {
      */
     public void startInteractiveSession() {
         System.out.println("======================================================================");
-        System.out.println("            Welcome to Uni-Gram Interactive Console Engine            ");
-        System.out.println("          Student-to-Student Marketplace Messaging Backend            ");
+        System.out.println("                              UNI-GRAM");
+        System.out.println("                      Campus Messaging System");
+        System.out.println("                        Chitkara University");
         System.out.println("======================================================================\n");
 
         boolean running = true;
         while (running) {
             printMainMenu();
-            System.out.print("Select an option [0-15]: ");
+            System.out.print("Select an option [0-5]: ");
             String choice = scanner.nextLine().trim();
             System.out.println();
 
@@ -287,77 +295,101 @@ public class Main {
                     handleRegisterStudent();
                     break;
                 case "3":
-                    handleListProducts();
+                    handleStartDirectConversation();
                     break;
                 case "4":
-                    handleRegisterProduct();
-                    break;
-                case "5":
-                    handleCreateConversation();
-                    break;
-                case "6":
                     handleListConversationsForStudent();
                     break;
-                case "7":
+                case "5":
                     handleOpenConversation();
                     break;
-                case "8":
-                    System.out.println("--- Running Java Collections Framework Syllabus Demonstration ---");
+                case "0":
+                    System.out.println("Exiting Uni-Gram. Goodbye!");
+                    running = false;
+                    break;
+                default:
+                    System.out.println("[!] Invalid choice. Please enter a number between 0 and 5.\n");
+            }
+        }
+    }
+
+    private void printMainMenu() {
+        System.out.println("MAIN MENU");
+        System.out.println("----------------------------------------------------------------------");
+        System.out.println("1. View Registered Students");
+        System.out.println("2. Register New Student");
+        System.out.println("3. Start a Conversation");
+        System.out.println("4. View My Conversations");
+        System.out.println("5. Open Conversation & Send Messages");
+        System.out.println();
+        System.out.println("0. Exit Uni-Gram");
+        System.out.println("----------------------------------------------------------------------");
+    }
+
+    /**
+     * Academic syllabus demonstration mode (--academic).
+     */
+    public void startAcademicSession() {
+        System.out.println("======================================================================");
+        System.out.println("            UNI-GRAM — Academic Java Syllabus Demonstrations");
+        System.out.println("======================================================================\n");
+
+        boolean running = true;
+        while (running) {
+            printAcademicMenu();
+            System.out.print("Select an option [0-7]: ");
+            String choice = scanner.nextLine().trim();
+            System.out.println();
+
+            switch (choice) {
+                case "1":
+                    System.out.println("--- Running Java Collections Framework Demonstration ---");
                     CollectionsDemo.runCollectionsDemonstration();
                     break;
-                case "9":
+                case "2":
                     handleThreadingMenu();
                     break;
-                case "10":
+                case "3":
                     handlePhase4Menu();
                     break;
-                case "11":
+                case "4":
                     handlePhase5Menu();
                     break;
-                case "12":
+                case "5":
                     handlePhase6Menu();
                     break;
-                case "13":
+                case "6":
                     handleConcurrentMessagingDemo();
                     break;
-                case "14":
+                case "7":
                     handlePhase8Menu();
-                    break;
-                case "15":
-                    handlePhase9Menu();
                     break;
                 case "0":
                     if (apiServer != null && apiServer.isRunning()) {
                         System.out.println("Stopping background HTTP API Server before exit...");
                         apiServer.stop(1);
                     }
-                    System.out.println("Exiting Uni-Gram console safely. Goodbye!");
+                    System.out.println("Exiting Academic Demonstration Mode. Goodbye!");
                     running = false;
                     break;
                 default:
-                    System.out.println("[!] Invalid choice. Please enter a valid menu number.\n");
+                    System.out.println("[!] Invalid choice. Please enter a number between 0 and 7.\n");
             }
         }
     }
 
-    private void printMainMenu() {
-        System.out.println("--------------------------- MAIN MENU --------------------------------");
-        System.out.println(" 1. View Registered Students (MySQL)");
-        System.out.println(" 2. Register New Student (MySQL)");
-        System.out.println(" 3. View Available Marketplace Products (MySQL)");
-        System.out.println(" 4. Register New Product Listing Reference (MySQL)");
-        System.out.println(" 5. Create New Conversation in Database (Buyer, Seller & Product)");
-        System.out.println(" 6. View All Conversations for a Student (MySQL)");
-        System.out.println(" 7. Open Conversation (Send & Read Messages via MySQL)");
-        System.out.println(" 8. Run Collections Syllabus Demonstration (Phase 2 In-Memory)");
-        System.out.println(" 9. Thread & Concurrency Fundamentals (Phase 3)");
-        System.out.println("10. Synchronization & Producer-Consumer (Phase 4 In-Memory)");
-        System.out.println("11. ExecutorService, Callable & Future (Phase 5)");
-        System.out.println("12. JDBC & MySQL Database Operations (Phase 6)");
-        System.out.println("13. Concurrent MySQL Messaging Engine Demo (Phase 7)");
-        System.out.println("14. Lambda, Streams, Optional, Generics & File Handling (Phase 8)");
-        System.out.println("15. Standalone HTTP API Server (Phase 9)");
-        System.out.println(" 0. Exit Application");
+    private void printAcademicMenu() {
+        System.out.println("ACADEMIC DEMONSTRATION MENU");
+        System.out.println("----------------------------------------------------------------------");
+        System.out.println("1. Collections Framework Demonstration (In-Memory)");
+        System.out.println("2. Thread & Concurrency Fundamentals");
+        System.out.println("3. Synchronization & Producer-Consumer Pattern");
+        System.out.println("4. ExecutorService, Callable & Future");
+        System.out.println("5. JDBC & MySQL Database Operations");
+        System.out.println("6. Concurrent MySQL Messaging Engine Demo");
+        System.out.println("7. Lambda, Streams, Optional, Generics & File Handling");
+        System.out.println();
+        System.out.println("0. Exit Academic Mode");
         System.out.println("----------------------------------------------------------------------");
     }
 
@@ -588,12 +620,12 @@ public class Main {
     }
 
     private void handleListStudents() {
-        System.out.println("=== Registered Students (MySQL) ===");
+        System.out.println("--- Registered Students ---");
         if (!checkDatabaseOrWarn()) return;
         try {
             Collection<User> users = jdbcChatService.getAllUsers();
             if (users.isEmpty()) {
-                System.out.println("No students registered in database currently.");
+                System.out.println("No students registered currently.");
             } else {
                 for (User u : users) {
                     System.out.printf("  - ID: %-16s | Name: %-20s | Email: %s%n",
@@ -607,7 +639,7 @@ public class Main {
     }
 
     private void handleRegisterStudent() {
-        System.out.println("=== Register New Student (MySQL) ===");
+        System.out.println("--- Register New Student ---");
         if (!checkDatabaseOrWarn()) return;
         try {
             System.out.print("Enter Student ID (e.g., usr_student_C): ");
@@ -619,7 +651,7 @@ public class Main {
 
             User user = new User(id, name, email);
             jdbcChatService.registerUser(user);
-            System.out.println("[✓] Student persisted to MySQL successfully: " + user.getFullName() + " (" + user.getUserId() + ")\n");
+            System.out.println("[✓] Student registered: " + user.getFullName() + " (" + user.getUserId() + ")\n");
         } catch (IllegalArgumentException e) {
             System.out.println("[!] Validation Error: " + e.getMessage() + "\n");
         } catch (UniGramException e) {
@@ -629,70 +661,26 @@ public class Main {
         }
     }
 
-    private void handleListProducts() {
-        System.out.println("=== Available Marketplace Products (MySQL) ===");
-        if (!checkDatabaseOrWarn()) return;
-        try {
-            Collection<ProductReference> products = jdbcChatService.getAllProducts();
-            if (products.isEmpty()) {
-                System.out.println("No products registered in database currently.");
-            } else {
-                for (ProductReference p : products) {
-                    System.out.printf("  - ID: %-18s | Title: %s%n", p.getProductId(), p.getProductTitle());
-                }
-            }
-            System.out.println();
-        } catch (DatabaseException e) {
-            System.out.println("[!] Database Error: " + e.getMessage() + "\n");
-        }
-    }
-
-    private void handleRegisterProduct() {
-        System.out.println("=== Register New Marketplace Product (MySQL) ===");
-        if (!checkDatabaseOrWarn()) return;
-        try {
-            System.out.print("Enter Product ID (e.g., prod_laptop_dell): ");
-            String id = scanner.nextLine().trim();
-            System.out.print("Enter Product Title: ");
-            String title = scanner.nextLine().trim();
-
-            ProductReference product = new ProductReference(id, title);
-            jdbcChatService.registerProduct(product);
-            System.out.println("[✓] Product persisted to MySQL successfully: " + product.getProductTitle() + " [" + product.getProductId() + "]\n");
-        } catch (IllegalArgumentException e) {
-            System.out.println("[!] Validation Error: " + e.getMessage() + "\n");
-        } catch (UniGramException e) {
-            System.out.println("[!] Business Rule Rejection: " + e.getMessage() + "\n");
-        } catch (DatabaseException e) {
-            System.out.println("[!] Database Error: " + e.getMessage() + "\n");
-        }
-    }
-
-    private void handleCreateConversation() {
-        System.out.println("=== Create New Conversation (MySQL) ===");
+    private void handleStartDirectConversation() {
+        System.out.println("--- Start a Conversation ---");
         if (!checkDatabaseOrWarn()) return;
         handleListStudents();
-        handleListProducts();
 
         try {
-            System.out.print("Enter Buyer User ID  : ");
-            String buyerId = scanner.nextLine().trim();
-            System.out.print("Enter Seller User ID : ");
-            String sellerId = scanner.nextLine().trim();
-            System.out.print("Enter Product ID     : ");
-            String productId = scanner.nextLine().trim();
+            System.out.print("Enter Your Student ID      : ");
+            String initiatorId = scanner.nextLine().trim();
+            System.out.print("Enter Recipient Student ID : ");
+            String recipientId = scanner.nextLine().trim();
 
-            Conversation conv = jdbcChatService.createConversation(buyerId, sellerId, productId);
-            System.out.println("[✓] Conversation committed to MySQL successfully!");
-            System.out.println("    Conversation ID: " + conv.getConversationId());
-            System.out.println("    Buyer          : " + conv.getBuyerId());
-            System.out.println("    Seller         : " + conv.getSellerId());
-            System.out.println("    Product ID     : " + conv.getProductId());
-            System.out.println("    Created At     : " + conv.getCreatedAt() + "\n");
+            Conversation conv = jdbcChatService.startDirectConversation(initiatorId, recipientId);
+            System.out.println("[✓] Conversation ready!");
+            System.out.println("    Conversation ID : " + conv.getConversationId());
+            System.out.println("    Participants    : " + conv.getBuyerId() + " <-> " + conv.getSellerId());
+            System.out.println("    Created At      : " + conv.getCreatedAt() + "\n");
         } catch (UserNotFoundException e) {
-            System.out.println("[!] User Not Found: " + e.getMessage() + "\n");
+            System.out.println("[!] Student Not Found: " + e.getMessage() + "\n");
         } catch (UniGramException e) {
-            System.out.println("[!] Conversation Creation Rejected: " + e.getMessage() + "\n");
+            System.out.println("[!] Could Not Start Conversation: " + e.getMessage() + "\n");
         } catch (IllegalArgumentException e) {
             System.out.println("[!] Validation Error: " + e.getMessage() + "\n");
         } catch (DatabaseException e) {
@@ -701,37 +689,34 @@ public class Main {
     }
 
     private void handleListConversationsForStudent() {
-        System.out.println("=== View Student Conversations (MySQL) ===");
+        System.out.println("--- View My Conversations ---");
         if (!checkDatabaseOrWarn()) return;
-        System.out.print("Enter Student ID: ");
+        System.out.print("Enter Your Student ID: ");
         String userId = scanner.nextLine().trim();
 
         try {
             List<Conversation> conversations = jdbcChatService.getConversationsForUser(userId);
             if (conversations.isEmpty()) {
-                System.out.println("No active conversations found in database for student: " + userId + "\n");
+                System.out.println("No conversations found for student: " + userId + "\n");
                 return;
             }
 
-            System.out.println("Active conversations for " + userId + " (" + conversations.size() + " total):");
+            System.out.println("Conversations for " + userId + " (" + conversations.size() + " total):");
             for (Conversation c : conversations) {
-                ProductReference pr = jdbcChatService.getProduct(c.getProductId());
                 int msgCount = jdbcMessageService.getMessageCount(c.getConversationId());
-                System.out.printf("  - [ID: %s] Product: \"%s\" | Buyer: %s | Seller: %s | Messages: %d%n",
-                        c.getConversationId(), pr.getProductTitle(), c.getBuyerId(), c.getSellerId(), msgCount);
+                System.out.printf("  - [ID: %s] Participants: %s <-> %s | Messages: %d%n",
+                        c.getConversationId(), c.getBuyerId(), c.getSellerId(), msgCount);
             }
             System.out.println();
         } catch (UserNotFoundException e) {
-            System.out.println("[!] Error: " + e.getMessage() + "\n");
-        } catch (UniGramException e) {
-            System.out.println("[!] Error: " + e.getMessage() + "\n");
+            System.out.println("[!] Student Not Found: " + e.getMessage() + "\n");
         } catch (DatabaseException e) {
             System.out.println("[!] Database Error: " + e.getMessage() + "\n");
         }
     }
 
     private void handleOpenConversation() {
-        System.out.println("=== Open Conversation (MySQL) ===");
+        System.out.println("--- Open Conversation & Send Messages ---");
         if (!checkDatabaseOrWarn()) return;
         Collection<Conversation> all;
         try {
@@ -742,19 +727,14 @@ public class Main {
         }
 
         if (all.isEmpty()) {
-            System.out.println("No conversations exist in MySQL currently. Create one first.\n");
+            System.out.println("No conversations exist yet. Start a conversation first.\n");
             return;
         }
 
         System.out.println("Available Conversations:");
         for (Conversation c : all) {
-            try {
-                ProductReference pr = jdbcChatService.getProduct(c.getProductId());
-                System.out.printf("  -> ID: %-15s | Item: %-35s | Buyer: %-14s | Seller: %s%n",
-                        c.getConversationId(), pr.getProductTitle(), c.getBuyerId(), c.getSellerId());
-            } catch (UniGramException | DatabaseException e) {
-                System.out.printf("  -> ID: %s | Buyer: %s | Seller: %s%n", c.getConversationId(), c.getBuyerId(), c.getSellerId());
-            }
+            System.out.printf("  -> ID: %-15s | Participants: %s <-> %s%n",
+                    c.getConversationId(), c.getBuyerId(), c.getSellerId());
         }
         System.out.println();
 
@@ -763,18 +743,16 @@ public class Main {
 
         try {
             Conversation conv = jdbcChatService.getConversationById(convId);
-            ProductReference pr = jdbcChatService.getProduct(conv.getProductId());
 
             boolean inChat = true;
             while (inChat) {
                 System.out.println("\n----------------------------------------------------------------------");
-                System.out.println("Active Conversation: " + conv.getConversationId());
-                System.out.println("Product: " + pr.getProductTitle() + " [" + pr.getProductId() + "]");
-                System.out.println("Participants: Buyer=" + conv.getBuyerId() + " | Seller=" + conv.getSellerId());
+                System.out.println("Conversation ID : " + conv.getConversationId());
+                System.out.println("Participants    : " + conv.getBuyerId() + " <-> " + conv.getSellerId());
                 System.out.println("----------------------------------------------------------------------");
-                System.out.println("1. View Complete Message History (MySQL)");
-                System.out.println("2. Send a Message (Committed to MySQL)");
-                System.out.println("3. View Latest Message (MySQL)");
+                System.out.println("1. View Message History");
+                System.out.println("2. Send a Message");
+                System.out.println("3. View Latest Message");
                 System.out.println("4. Return to Main Menu");
                 System.out.print("Choose action [1-4]: ");
                 String action = scanner.nextLine().trim();
@@ -786,7 +764,7 @@ public class Main {
                         String viewerId = scanner.nextLine().trim();
                         try {
                             List<Message> history = jdbcMessageService.getMessageHistory(conv.getConversationId(), viewerId);
-                            System.out.println("\n--- Message History (" + history.size() + " messages from MySQL) ---");
+                            System.out.println("\n--- Message History (" + history.size() + " messages) ---");
                             if (history.isEmpty()) {
                                 System.out.println("No messages yet in this conversation.");
                             } else {
@@ -806,18 +784,18 @@ public class Main {
                     case "2":
                         System.out.print("Enter Sender Student ID: ");
                         String senderId = scanner.nextLine().trim();
-                        System.out.print("Enter Message Content: ");
+                        System.out.print("Enter Message Content  : ");
                         String content = scanner.nextLine();
 
                         try {
                             Message sent = jdbcMessageService.sendMessage(conv.getConversationId(), senderId, content);
-                            System.out.println("[✓] Message transaction committed to MySQL successfully!");
-                            System.out.println("    Message ID: " + sent.getMessageId());
-                            System.out.println("    Timestamp : " + sent.getSentAt());
+                            System.out.println("[✓] Message sent!");
+                            System.out.println("    Message ID : " + sent.getMessageId());
+                            System.out.println("    Timestamp  : " + sent.getSentAt());
                         } catch (UnauthorizedConversationAccessException e) {
-                            System.out.println("[!] Security Rejection: " + e.getMessage());
+                            System.out.println("[!] Access Denied: " + e.getMessage());
                         } catch (InvalidMessageException e) {
-                            System.out.println("[!] Validation Rejection: " + e.getMessage());
+                            System.out.println("[!] Validation Error: " + e.getMessage());
                         } catch (DatabaseException e) {
                             System.out.println("[!] Database Error: " + e.getMessage());
                         }
@@ -830,7 +808,7 @@ public class Main {
                             Optional<Message> latest = jdbcMessageService.getLatestMessage(conv.getConversationId(), requesterId);
                             if (latest.isPresent()) {
                                 Message m = latest.get();
-                                System.out.printf("Latest Message: [%s] at %s:%n  \"%s\"%n",
+                                System.out.printf("Latest Message [%s at %s]:%n  \"%s\"%n",
                                         m.getSenderId(), m.getSentAt(), m.getContent());
                             } else {
                                 System.out.println("No messages sent yet in this conversation.");
@@ -851,9 +829,9 @@ public class Main {
                 }
             }
         } catch (ConversationNotFoundException e) {
-            System.out.println("[!] Error: " + e.getMessage() + "\n");
-        } catch (UniGramException | DatabaseException e) {
-            System.out.println("[!] Error: " + e.getMessage() + "\n");
+            System.out.println("[!] Conversation not found: " + e.getMessage() + "\n");
+        } catch (DatabaseException e) {
+            System.out.println("[!] Database Error: " + e.getMessage() + "\n");
         }
     }
 

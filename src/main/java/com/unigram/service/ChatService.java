@@ -158,7 +158,7 @@ public class ChatService {
 
         // 4. Prevent duplicate conversation for the same buyer, seller, and product
         for (Conversation existing : this.storage.getAllConversations()) {
-            boolean sameProduct = existing.getProductId().equalsIgnoreCase(cleanProductId);
+            boolean sameProduct = existing.getProductId() != null && existing.getProductId().equalsIgnoreCase(cleanProductId);
             boolean sameParticipants =
                     (existing.getBuyerId().equalsIgnoreCase(cleanBuyerId) && existing.getSellerId().equalsIgnoreCase(cleanSellerId))
                     || (existing.getBuyerId().equalsIgnoreCase(cleanSellerId) && existing.getSellerId().equalsIgnoreCase(cleanBuyerId));
@@ -177,6 +177,53 @@ public class ChatService {
         Conversation conversation = new Conversation(conversationId, cleanBuyerId, cleanSellerId, cleanProductId, LocalDateTime.now());
 
         // 6. Save in storage
+        this.storage.saveConversation(conversation);
+        return conversation;
+    }
+
+    /**
+     * Starts or retrieves an existing direct student-to-student conversation.
+     * Synchronized to prevent duplicate direct threads under concurrent initiation.
+     *
+     * @param initiatorId initiating student's ID
+     * @param recipientId recipient student's ID
+     * @return existing or newly created direct Conversation entity
+     * @throws UserNotFoundException if either student does not exist
+     */
+    public synchronized Conversation startDirectConversation(String initiatorId, String recipientId)
+            throws UserNotFoundException {
+
+        if (initiatorId == null || initiatorId.trim().isEmpty()) {
+            throw new IllegalArgumentException("Initiating student ID cannot be null or empty.");
+        }
+        if (recipientId == null || recipientId.trim().isEmpty()) {
+            throw new IllegalArgumentException("Recipient student ID cannot be null or empty.");
+        }
+
+        String cleanInitiatorId = initiatorId.trim();
+        String cleanRecipientId = recipientId.trim();
+
+        if (cleanInitiatorId.equalsIgnoreCase(cleanRecipientId)) {
+            throw new IllegalArgumentException("A student cannot start a conversation with themselves.");
+        }
+
+        getUser(cleanInitiatorId);
+        getUser(cleanRecipientId);
+
+        for (Conversation existing : this.storage.getAllConversations()) {
+            if (!existing.isDirectConversation()) {
+                continue;
+            }
+            boolean sameParticipants =
+                    (existing.getBuyerId().equalsIgnoreCase(cleanInitiatorId) && existing.getSellerId().equalsIgnoreCase(cleanRecipientId))
+                    || (existing.getBuyerId().equalsIgnoreCase(cleanRecipientId) && existing.getSellerId().equalsIgnoreCase(cleanInitiatorId));
+            if (sameParticipants) {
+                return existing;
+            }
+        }
+
+        String conversationId = "conv_" + UUID.randomUUID().toString().replace("-", "").substring(0, 8);
+        Conversation conversation = new Conversation(conversationId, cleanInitiatorId, cleanRecipientId, LocalDateTime.now());
         this.storage.saveConversation(conversation);
         return conversation;
     }

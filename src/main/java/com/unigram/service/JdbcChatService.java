@@ -283,6 +283,78 @@ public class JdbcChatService {
     }
 
     /**
+     * Starts or retrieves an existing direct student-to-student conversation in MySQL.
+     * Guarantees no duplicate direct conversations even when initiated concurrently.
+     *
+     * @param initiatorId initiating student's ID
+     * @param recipientId recipient student's ID
+     * @return existing or newly created direct Conversation entity
+     * @throws UserNotFoundException if either student does not exist
+     * @throws UniGramException      if a database integrity error occurs
+     * @throws DatabaseException     if database transaction fails
+     */
+    public Conversation startDirectConversation(String initiatorId, String recipientId)
+            throws UserNotFoundException, UniGramException, DatabaseException {
+
+        if (initiatorId == null || initiatorId.trim().isEmpty()) {
+            throw new IllegalArgumentException("Initiating student ID cannot be null or empty.");
+        }
+        if (recipientId == null || recipientId.trim().isEmpty()) {
+            throw new IllegalArgumentException("Recipient student ID cannot be null or empty.");
+        }
+
+        String cleanInitiatorId = initiatorId.trim();
+        String cleanRecipientId = recipientId.trim();
+
+        if (cleanInitiatorId.equalsIgnoreCase(cleanRecipientId)) {
+            throw new IllegalArgumentException("A student cannot start a conversation with themselves.");
+        }
+
+        try (Connection conn = DatabaseConnectionFactory.getConnection(config)) {
+            conn.setAutoCommit(false);
+            try {
+                if (!userDao.existsById(conn, cleanInitiatorId)) {
+                    throw new UserNotFoundException(cleanInitiatorId);
+                }
+                if (!userDao.existsById(conn, cleanRecipientId)) {
+                    throw new UserNotFoundException(cleanRecipientId);
+                }
+
+                Optional<Conversation> existing = conversationDao.findDirectByParticipants(conn, cleanInitiatorId, cleanRecipientId);
+                if (existing.isPresent()) {
+                    conn.commit();
+                    return existing.get();
+                }
+
+                String conversationId = "conv_" + UUID.randomUUID().toString().replace("-", "").substring(0, 8);
+                Conversation conversation = new Conversation(conversationId, cleanInitiatorId, cleanRecipientId, LocalDateTime.now());
+                conversationDao.insert(conn, conversation);
+                conn.commit();
+                return conversation;
+
+            } catch (SQLException e) {
+                conn.rollback();
+                if ("23000".equals(e.getSQLState())) {
+                    // Concurrent initiation hit unique direct_pair_key constraint; retrieve the committed thread
+                    Optional<Conversation> concurrentExisting = conversationDao.findDirectByParticipants(conn, cleanInitiatorId, cleanRecipientId);
+                    if (concurrentExisting.isPresent()) {
+                        return concurrentExisting.get();
+                    }
+                    throw new UniGramException("Database integrity constraint violation during direct conversation creation: " + e.getMessage());
+                }
+                throw new DatabaseException("Failed to persist direct conversation: " + e.getMessage(), e);
+            } catch (Exception e) {
+                conn.rollback();
+                throw e;
+            } finally {
+                conn.setAutoCommit(true);
+            }
+        } catch (SQLException e) {
+            throw new DatabaseException("Database connection error: " + e.getMessage(), e);
+        }
+    }
+
+    /**
      * Retrieves a conversation by its unique ID from MySQL.
      *
      * @param conversationId conversation identifier
