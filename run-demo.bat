@@ -111,21 +111,24 @@ if !BACKEND_UP! equ 0 (
 
 echo [PASS] Java backend is UP and responsive on port 8080.
 if !MYSQL_CONNECTED! equ 1 (
-  echo [PASS] MySQL Persistence: CONNECTED (Integrated Mode active).
+  echo [PASS] MySQL Persistence: CONNECTED - Integrated Mode active.
 ) else (
-  echo [WARNING] MySQL is NOT connected. Running in IN_MEMORY_PERSISTENCE mode (local demo fallback).
+  echo [WARNING] MySQL is NOT connected - Running in IN_MEMORY_PERSISTENCE mode - local demo fallback.
 )
 
 :: 4. Start Vite Frontend
 echo.
-echo [4/5] Starting UniMart React Frontend (Vite)...
+echo [4/5] Starting UniMart React Frontend [Vite]...
 cd /d "%~dp0unimart-frontend"
 if not exist "node_modules" (
-  echo Installing frontend dependencies (npm install)...
+  echo Installing frontend dependencies [npm install]...
   call npm install
 )
 
-start "UniMart Frontend (Vite)" cmd /k npm run dev
+:: Free port 5173 if an old instance is running
+powershell -NoProfile -Command "try { Get-NetTCPConnection -LocalPort 5173 -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique | ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue }; Start-Sleep -Milliseconds 500 } catch {}" >nul 2>&1
+
+start "UniMart Frontend (Vite)" cmd /k npm run dev -- --host 127.0.0.1 --port 5173 --strictPort
 cd /d "%~dp0"
 
 :: 5. Wait for Frontend and Launch Browser
@@ -166,9 +169,9 @@ echo.
 echo  Frontend URL:     http://localhost:5173
 echo  Backend Health:   http://127.0.0.1:8080/api/health
 if !MYSQL_CONNECTED! equ 1 (
-  echo  Persistence:      INTEGRATED DEMO (MySQL Connected)
+  echo  Persistence:      INTEGRATED DEMO - MySQL Connected
 ) else (
-  echo  Persistence:      IN-MEMORY DEMO (MySQL Disconnected)
+  echo  Persistence:      IN-MEMORY DEMO - MySQL Disconnected
 )
 echo.
 echo  Demo Accounts for Presentation:

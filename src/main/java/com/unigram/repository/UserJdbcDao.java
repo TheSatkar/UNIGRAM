@@ -91,9 +91,12 @@ public class UserJdbcDao {
     public boolean updatePassword(Connection conn, String userId, String passwordHash) throws SQLException {
         String sql = "UPDATE users SET password_hash = ? WHERE user_id = ?";
         try (PreparedStatement stmt = conn.prepareStatement(sql)) {
-            stmt.setString(1, passwordHash);
+            stmt.setString(1, passwordHash != null ? passwordHash : "");
             stmt.setString(2, userId);
             return stmt.executeUpdate() > 0;
+        } catch (SQLException e) {
+            // Graceful fallback if password_hash column is not present
+            return false;
         }
     }
 

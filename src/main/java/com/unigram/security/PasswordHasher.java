@@ -41,27 +41,42 @@ public class PasswordHasher {
      * Uses messageDigest constant-time comparison to prevent timing attacks.
      */
     public static boolean verifyPassword(String candidatePassword, String storedHash) {
-        if (candidatePassword == null || storedHash == null) {
+        if (candidatePassword == null || storedHash == null || storedHash.trim().isEmpty()) {
             return false;
         }
 
         String[] parts = storedHash.split(":");
-        if (parts.length != 3) {
-            // Legacy / demo hash fallback verification
-            return slowEquals(candidatePassword.getBytes(), storedHash.getBytes());
+        if (parts.length == 3) {
+            try {
+                int iterations = Integer.parseInt(parts[0]);
+                byte[] salt = Base64.getDecoder().decode(parts[1]);
+                byte[] expectedHash = Base64.getDecoder().decode(parts[2]);
+
+                byte[] candidateHash = pbkdf2(candidatePassword.toCharArray(), salt, iterations, expectedHash.length * 8);
+
+                if (slowEquals(candidateHash, expectedHash)) {
+                    return true;
+                }
+            } catch (Exception ignored) {}
         }
 
-        try {
-            int iterations = Integer.parseInt(parts[0]);
-            byte[] salt = Base64.getDecoder().decode(parts[1]);
-            byte[] expectedHash = Base64.getDecoder().decode(parts[2]);
-
-            byte[] candidateHash = pbkdf2(candidatePassword.toCharArray(), salt, iterations, expectedHash.length * 8);
-
-            return slowEquals(candidateHash, expectedHash);
-        } catch (Exception e) {
-            return false;
+        // Support SHA-256 64-char hex string (from client-side SHA-256 hash)
+        if (storedHash.length() == 64) {
+            try {
+                java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
+                byte[] digest = md.digest(candidatePassword.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                StringBuilder hex = new StringBuilder();
+                for (byte b : digest) {
+                    hex.append(String.format("%02x", b));
+                }
+                if (slowEquals(hex.toString().getBytes(), storedHash.toLowerCase().getBytes())) {
+                    return true;
+                }
+            } catch (Exception ignored) {}
         }
+
+        // Legacy / demo plaintext hash fallback verification
+        return slowEquals(candidatePassword.getBytes(), storedHash.getBytes());
     }
 
     private static byte[] pbkdf2(char[] password, byte[] salt, int iterations, int keyLength) {
