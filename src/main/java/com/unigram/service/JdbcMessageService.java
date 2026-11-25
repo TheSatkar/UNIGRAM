@@ -18,9 +18,8 @@ import java.util.Optional;
 import java.util.UUID;
 
 /**
- * MySQL database-backed implementation of MessageService.
- * Manages message dispatching, participant authorization, and chronological history
- * with explicit JDBC transaction boundaries ensuring commit confirmation before reporting success.
+ * Service managing message sending, participant authorization, and
+ * chronological message history backed by MySQL transactions.
  */
 public class JdbcMessageService {
 
@@ -29,10 +28,6 @@ public class JdbcMessageService {
     private final MessageJdbcDao messageDao;
 
     public JdbcMessageService(DatabaseConfig config, JdbcChatService chatService) {
-        this(config, chatService, new MessageJdbcDao());
-    }
-
-    public JdbcMessageService(DatabaseConfig config, JdbcChatService chatService, MessageJdbcDao messageDao) {
         if (config == null) {
             throw new IllegalArgumentException("DatabaseConfig cannot be null.");
         }
@@ -41,55 +36,37 @@ public class JdbcMessageService {
         }
         this.config = config;
         this.chatService = chatService;
-        this.messageDao = messageDao != null ? messageDao : new MessageJdbcDao();
+        this.messageDao = new MessageJdbcDao();
     }
 
     /**
-     * Sends a message to an existing conversation in MySQL.
-     * Enforces that the message is never reported as sent or successful until
-     * the database transaction commits successfully.
-     *
-     * @param conversationId target conversation ID
-     * @param senderId       student ID of the sender
-     * @param content        text content of the message
-     * @return the successfully persisted Message entity
-     * @throws ConversationNotFoundException            if conversation does not exist
-     * @throws UnauthorizedConversationAccessException if sender is not an authorized participant
-     * @throws InvalidMessageException                  if content is empty or blank
-     * @throws DatabaseException                        if database connection or commit fails
+     * Sends a message within an existing conversation using an explicit transaction.
      */
     public Message sendMessage(String conversationId, String senderId, String content)
             throws ConversationNotFoundException, UnauthorizedConversationAccessException,
                    InvalidMessageException, DatabaseException {
 
-        // 1. Content validation
         if (content == null || content.trim().isEmpty()) {
-            throw new InvalidMessageException("Message content cannot be null or blank.");
+            throw new InvalidMessageException("Message content cannot be empty.");
         }
 
-        // 2 & 3. Conversation existence and participant authorization validation
-        this.chatService.validateParticipant(conversationId, senderId);
+        chatService.validateParticipant(conversationId, senderId);
 
         String cleanConvId = conversationId.trim();
         String cleanSenderId = senderId.trim();
         String cleanContent = content.trim();
 
-        // 4. Open dedicated connection and perform transactional insert
         try (Connection conn = DatabaseConnectionFactory.getConnection(config)) {
             conn.setAutoCommit(false);
             try {
                 String messageId = "msg_" + UUID.randomUUID().toString().replace("-", "").substring(0, 8);
                 Message message = new Message(messageId, cleanConvId, cleanSenderId, cleanContent, LocalDateTime.now());
-
                 messageDao.insert(conn, message);
-
-                // Commit transaction to disk
                 conn.commit();
                 return message;
-
             } catch (SQLException e) {
                 conn.rollback();
-                throw new DatabaseException("Failed to persist message in transaction: " + e.getMessage(), e);
+                throw new DatabaseException("Failed to send message: " + e.getMessage(), e);
             } catch (Exception e) {
                 conn.rollback();
                 throw e;
@@ -101,45 +78,19 @@ public class JdbcMessageService {
         }
     }
 
-    /**
-     * Retrieves the complete chronological message history for a conversation from MySQL.
-     * Access is restricted to authorized conversation participants.
-     *
-     * @param conversationId   target conversation ID
-     * @param requestingUserId student ID requesting the history
-     * @return List of messages in strict chronological order (sent_at ASC)
-     * @throws ConversationNotFoundException            if conversation does not exist
-     * @throws UnauthorizedConversationAccessException if user is not a participant
-     * @throws DatabaseException                        if database error occurs
-     */
-    public List<Message> getMessageHistory(String conversationId, String requestingUserId)
+    public List<Message> getMessageHistory(String conversationId, String requestingStudentId)
             throws ConversationNotFoundException, UnauthorizedConversationAccessException, DatabaseException {
-
-        this.chatService.validateParticipant(conversationId, requestingUserId);
-
+        chatService.validateParticipant(conversationId, requestingStudentId);
         try (Connection conn = DatabaseConnectionFactory.getConnection(config)) {
-            List<Message> history = messageDao.findByConversationId(conn, conversationId.trim());
-            return Collections.unmodifiableList(history);
+            return Collections.unmodifiableList(messageDao.findByConversationId(conn, conversationId.trim()));
         } catch (SQLException e) {
             throw new DatabaseException("Failed to retrieve message history: " + e.getMessage(), e);
         }
     }
 
-    /**
-     * Retrieves the latest message sent in a conversation from MySQL.
-     *
-     * @param conversationId   target conversation ID
-     * @param requestingUserId student ID requesting the latest message
-     * @return Optional containing latest Message if present, or empty Optional
-     * @throws ConversationNotFoundException            if conversation does not exist
-     * @throws UnauthorizedConversationAccessException if requesting user is not a participant
-     * @throws DatabaseException                        if database error occurs
-     */
-    public Optional<Message> getLatestMessage(String conversationId, String requestingUserId)
+    public Optional<Message> getLatestMessage(String conversationId, String requestingStudentId)
             throws ConversationNotFoundException, UnauthorizedConversationAccessException, DatabaseException {
-
-        this.chatService.validateParticipant(conversationId, requestingUserId);
-
+        chatService.validateParticipant(conversationId, requestingStudentId);
         try (Connection conn = DatabaseConnectionFactory.getConnection(config)) {
             return messageDao.findLatestByConversationId(conn, conversationId.trim());
         } catch (SQLException e) {
@@ -147,26 +98,11 @@ public class JdbcMessageService {
         }
     }
 
-    /**
-     * Retrieves total message count for a conversation from MySQL.
-     *
-     * @param conversationId target conversation ID
-     * @return number of messages
-     * @throws DatabaseException if database error occurs
-     */
     public int getMessageCount(String conversationId) throws DatabaseException {
         try (Connection conn = DatabaseConnectionFactory.getConnection(config)) {
             return messageDao.countByConversationId(conn, conversationId.trim());
         } catch (SQLException e) {
             throw new DatabaseException("Failed to count messages: " + e.getMessage(), e);
         }
-    }
-
-    public DatabaseConfig getConfig() {
-        return config;
-    }
-
-    public JdbcChatService getChatService() {
-        return chatService;
     }
 }

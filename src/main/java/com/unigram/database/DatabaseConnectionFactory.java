@@ -5,34 +5,17 @@ import java.sql.DriverManager;
 import java.sql.SQLException;
 
 /**
- * Factory for creating dedicated, short-lived JDBC Connection instances.
- * 
- * Demonstrates:
- * - DriverManager.getConnection()
- * - JDBC 4.0+ automatic driver discovery and registration via Java ServiceLoader (SPI)
- * - Thread isolation: Connections are never shared between threads
- * - Defensive error handling and credential protection
+ * Opens short-lived JDBC connections to MySQL and masks passwords in errors.
  */
 public class DatabaseConnectionFactory {
 
     static {
-        // Explicit driver class check for viva demonstration
         try {
             Class.forName("com.mysql.cj.jdbc.Driver");
-        } catch (ClassNotFoundException e) {
-            // In modern JDBC 4.0+, the driver auto-registers via META-INF/services/java.sql.Driver.
-            // If the JAR is not on the classpath, this notice explains the resolution.
+        } catch (ClassNotFoundException ignored) {
         }
     }
 
-    /**
-     * Creates and opens a new standalone JDBC Connection.
-     * Callers must manage the connection lifecycle using try-with-resources.
-     *
-     * @param config database configuration
-     * @return an open JDBC Connection
-     * @throws DatabaseException if connection fails or configuration is missing
-     */
     public static Connection getConnection(DatabaseConfig config) throws DatabaseException {
         if (config == null) {
             throw new DatabaseException("DatabaseConfig cannot be null.");
@@ -42,43 +25,23 @@ public class DatabaseConnectionFactory {
         try {
             DriverManager.setLoginTimeout(3);
             String url = config.getUrl();
-            if (url != null && !url.contains("connectTimeout=")) {
+            if (!url.contains("connectTimeout=")) {
                 String separator = url.contains("?") ? "&" : "?";
                 url = url + separator + "connectTimeout=3000&socketTimeout=5000";
             }
             return DriverManager.getConnection(url, config.getUser(), config.getPassword());
         } catch (SQLException e) {
-            String sanitizedMessage = sanitizeSqlExceptionMessage(e.getMessage(), config);
-            throw new DatabaseException("Failed to establish JDBC Connection: " + sanitizedMessage, e);
+            throw new DatabaseException("Failed to connect to MySQL: " + sanitizeMessage(e.getMessage(), config), e);
         }
     }
 
-    /**
-     * Tests whether a connection can be established and is currently valid.
-     *
-     * @param config         database configuration
-     * @param timeoutSeconds timeout in seconds
-     * @return true if valid, false otherwise
-     */
-    public static boolean testConnection(DatabaseConfig config, int timeoutSeconds) {
-        if (config == null || !config.isConfigured()) {
-            return false;
+    public static String sanitizeMessage(String message, DatabaseConfig config) {
+        if (message == null) {
+            return "Unknown SQL error.";
         }
-        try {
-            DriverManager.setLoginTimeout(Math.max(1, timeoutSeconds));
-            try (Connection conn = getConnection(config)) {
-                return conn != null && conn.isValid(timeoutSeconds);
-            }
-        } catch (Exception e) {
-            return false;
-        }
-    }
-
-    public static String sanitizeSqlExceptionMessage(String msg, DatabaseConfig config) {
-        if (msg == null) return "Unknown SQL error.";
         if (config != null && config.getPassword() != null && !config.getPassword().isEmpty()) {
-            return msg.replace(config.getPassword(), "********");
+            return message.replace(config.getPassword(), "********");
         }
-        return msg;
+        return message;
     }
 }

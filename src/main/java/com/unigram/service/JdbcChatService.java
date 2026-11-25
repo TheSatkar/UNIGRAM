@@ -8,182 +8,176 @@ import com.unigram.exception.UnauthorizedConversationAccessException;
 import com.unigram.exception.UniGramException;
 import com.unigram.exception.UserNotFoundException;
 import com.unigram.model.Conversation;
-import com.unigram.model.ProductReference;
 import com.unigram.model.User;
 import com.unigram.repository.ConversationJdbcDao;
-import com.unigram.repository.ProductReferenceJdbcDao;
 import com.unigram.repository.UserJdbcDao;
 
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.time.LocalDateTime;
-import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
 /**
- * MySQL database-backed implementation of ChatService.
- * Manages user registration, marketplace listings, and conversation lifecycle
- * using standard JDBC DAOs and explicit ACID transaction boundaries.
+ * Service managing student registration and direct one-to-one conversations
+ * backed by MySQL via JDBC transactions.
  */
 public class JdbcChatService {
 
     private final DatabaseConfig config;
     private final UserJdbcDao userDao;
-    private final ProductReferenceJdbcDao productDao;
     private final ConversationJdbcDao conversationDao;
 
-    public JdbcChatService() {
-        this(new DatabaseConfig(), new UserJdbcDao(), new ProductReferenceJdbcDao(), new ConversationJdbcDao());
-    }
-
     public JdbcChatService(DatabaseConfig config) {
-        this(config, new UserJdbcDao(), new ProductReferenceJdbcDao(), new ConversationJdbcDao());
-    }
-
-    public JdbcChatService(DatabaseConfig config,
-                           UserJdbcDao userDao,
-                           ProductReferenceJdbcDao productDao,
-                           ConversationJdbcDao conversationDao) {
         if (config == null) {
             throw new IllegalArgumentException("DatabaseConfig cannot be null.");
         }
         this.config = config;
-        this.userDao = userDao != null ? userDao : new UserJdbcDao();
-        this.productDao = productDao != null ? productDao : new ProductReferenceJdbcDao();
-        this.conversationDao = conversationDao != null ? conversationDao : new ConversationJdbcDao();
+        this.userDao = new UserJdbcDao();
+        this.conversationDao = new ConversationJdbcDao();
     }
 
     /**
-     * Registers a new student user in the MySQL database.
-     *
-     * @param user user entity to register
-     * @throws DatabaseException if a database access error occurs
-     * @throws UniGramException  if duplicate ID or duplicate unique email is attempted
+     * Registers a new student in MySQL, rejecting duplicate IDs or emails.
      */
     public void registerUser(User user) throws DatabaseException, UniGramException {
         if (user == null) {
-            throw new IllegalArgumentException("User cannot be null.");
+            throw new IllegalArgumentException("Student cannot be null.");
         }
         try (Connection conn = DatabaseConnectionFactory.getConnection(config)) {
             if (userDao.existsById(conn, user.getUserId())) {
-                throw new UniGramException("User already registered with ID: " + user.getUserId());
+                throw new UniGramException("A student is already registered with ID: " + user.getUserId());
+            }
+            if (userDao.existsByEmail(conn, user.getEmail())) {
+                throw new UniGramException("A student is already registered with email: " + user.getEmail());
             }
             userDao.insert(conn, user);
         } catch (SQLException e) {
             if ("23000".equals(e.getSQLState())) {
-                throw new UniGramException("Database constraint violation (e.g. duplicate email/ID): " + e.getMessage());
+                throw new UniGramException("Duplicate student ID or email is not allowed.");
             }
-            throw new DatabaseException("Failed to register user: " + e.getMessage(), e);
+            throw new DatabaseException("Failed to register student: " + e.getMessage(), e);
         }
     }
 
-    /**
-     * Retrieves a user by their unique identifier from MySQL.
-     *
-     * @param userId user identifier
-     * @return User entity
-     * @throws UserNotFoundException if user does not exist
-     * @throws DatabaseException     if database error occurs
-     */
-    public User getUser(String userId) throws UserNotFoundException, DatabaseException {
-        if (userId == null || userId.trim().isEmpty()) {
-            throw new UserNotFoundException(userId != null ? userId : "null");
+    public User getUser(String studentId) throws UserNotFoundException, DatabaseException {
+        if (studentId == null || studentId.trim().isEmpty()) {
+            throw new UserNotFoundException(studentId != null ? studentId : "null");
         }
         try (Connection conn = DatabaseConnectionFactory.getConnection(config)) {
-            Optional<User> userOpt = userDao.findById(conn, userId.trim());
-            if (userOpt.isEmpty()) {
-                throw new UserNotFoundException(userId.trim());
+            Optional<User> found = userDao.findById(conn, studentId.trim());
+            if (found.isEmpty()) {
+                throw new UserNotFoundException(studentId.trim());
             }
-            return userOpt.get();
+            return found.get();
         } catch (SQLException e) {
-            throw new DatabaseException("Failed to retrieve user '" + userId + "': " + e.getMessage(), e);
+            throw new DatabaseException("Failed to retrieve student: " + e.getMessage(), e);
         }
     }
 
-    /**
-     * Retrieves all registered students from MySQL.
-     *
-     * @return Collection of registered User entities
-     * @throws DatabaseException if database error occurs
-     */
-    public Collection<User> getAllUsers() throws DatabaseException {
+    public List<User> getAllUsers() throws DatabaseException {
         try (Connection conn = DatabaseConnectionFactory.getConnection(config)) {
             return userDao.findAll(conn);
         } catch (SQLException e) {
-            throw new DatabaseException("Failed to list users: " + e.getMessage(), e);
+            throw new DatabaseException("Failed to list registered students: " + e.getMessage(), e);
         }
     }
 
     /**
-     * Registers a marketplace product reference in MySQL.
-     *
-     * @param product product reference entity
-     * @throws DatabaseException if database error occurs
-     * @throws UniGramException  if duplicate product ID is attempted
+     * Starts a direct conversation between two students, or returns the existing
+     * conversation if one already exists in either direction.
+     * Safe against concurrent duplicate creation via database unique key handling.
      */
-    public void registerProduct(ProductReference product) throws DatabaseException, UniGramException {
-        if (product == null) {
-            throw new IllegalArgumentException("Product cannot be null.");
+    public Conversation startOrGetConversation(String initiatorId, String recipientId)
+            throws UserNotFoundException, UniGramException, DatabaseException {
+
+        if (initiatorId == null || initiatorId.trim().isEmpty()) {
+            throw new IllegalArgumentException("Your student ID cannot be empty.");
+        }
+        if (recipientId == null || recipientId.trim().isEmpty()) {
+            throw new IllegalArgumentException("Recipient student ID cannot be empty.");
+        }
+
+        String cleanInitiator = initiatorId.trim();
+        String cleanRecipient = recipientId.trim();
+
+        if (cleanInitiator.equalsIgnoreCase(cleanRecipient)) {
+            throw new IllegalArgumentException("A student cannot start a conversation with themselves.");
+        }
+
+        try (Connection conn = DatabaseConnectionFactory.getConnection(config)) {
+            conn.setAutoCommit(false);
+            try {
+                if (!userDao.existsById(conn, cleanInitiator)) {
+                    throw new UserNotFoundException(cleanInitiator);
+                }
+                if (!userDao.existsById(conn, cleanRecipient)) {
+                    throw new UserNotFoundException(cleanRecipient);
+                }
+
+                Optional<Conversation> existing = conversationDao.findByParticipants(conn, cleanInitiator, cleanRecipient);
+                if (existing.isPresent()) {
+                    conn.commit();
+                    return existing.get();
+                }
+
+                String conversationId = "conv_" + UUID.randomUUID().toString().replace("-", "").substring(0, 8);
+                Conversation conversation = new Conversation(conversationId, cleanInitiator, cleanRecipient, LocalDateTime.now());
+                conversationDao.insert(conn, conversation);
+                conn.commit();
+                return conversation;
+
+            } catch (SQLException e) {
+                conn.rollback();
+                if ("23000".equals(e.getSQLState())) {
+                    // Concurrent creation hit the unique pair index; retrieve the committed row
+                    Optional<Conversation> concurrentExisting =
+                            conversationDao.findByParticipants(conn, cleanInitiator, cleanRecipient);
+                    if (concurrentExisting.isPresent()) {
+                        return concurrentExisting.get();
+                    }
+                    throw new UniGramException("Could not create conversation due to duplicate constraint.");
+                }
+                throw new DatabaseException("Failed to create conversation: " + e.getMessage(), e);
+            } catch (Exception e) {
+                conn.rollback();
+                throw e;
+            } finally {
+                conn.setAutoCommit(true);
+            }
+        } catch (SQLException e) {
+            throw new DatabaseException("Database connection error: " + e.getMessage(), e);
+        }
+    }
+
+    public Conversation getConversationById(String conversationId)
+            throws ConversationNotFoundException, DatabaseException {
+        if (conversationId == null || conversationId.trim().isEmpty()) {
+            throw new ConversationNotFoundException(conversationId != null ? conversationId : "null");
         }
         try (Connection conn = DatabaseConnectionFactory.getConnection(config)) {
-            if (productDao.existsById(conn, product.getProductId())) {
-                throw new UniGramException("Product reference already exists with ID: " + product.getProductId());
+            Optional<Conversation> found = conversationDao.findById(conn, conversationId.trim());
+            if (found.isEmpty()) {
+                throw new ConversationNotFoundException(conversationId.trim());
             }
-            productDao.insert(conn, product);
+            return found.get();
         } catch (SQLException e) {
-            if ("23000".equals(e.getSQLState())) {
-                throw new UniGramException("Constraint violation registering product: " + e.getMessage());
-            }
-            throw new DatabaseException("Failed to register product: " + e.getMessage(), e);
+            throw new DatabaseException("Failed to retrieve conversation: " + e.getMessage(), e);
         }
     }
 
-    /**
-     * Retrieves all registered product references from MySQL.
-     *
-     * @return Collection of registered ProductReference entities
-     * @throws DatabaseException if database error occurs
-     */
-    public Collection<ProductReference> getAllProducts() throws DatabaseException {
+    public List<Conversation> getConversationsForUser(String studentId)
+            throws UserNotFoundException, DatabaseException {
+        getUser(studentId);
         try (Connection conn = DatabaseConnectionFactory.getConnection(config)) {
-            return productDao.findAll(conn);
+            return conversationDao.findByParticipant(conn, studentId.trim());
         } catch (SQLException e) {
-            throw new DatabaseException("Failed to list products: " + e.getMessage(), e);
+            throw new DatabaseException("Failed to retrieve conversations: " + e.getMessage(), e);
         }
     }
 
-    /**
-     * Retrieves a product reference by its ID from MySQL.
-     *
-     * @param productId product identifier
-     * @return ProductReference entity
-     * @throws UniGramException  if product reference does not exist
-     * @throws DatabaseException if database error occurs
-     */
-    public ProductReference getProduct(String productId) throws UniGramException, DatabaseException {
-        if (productId == null || productId.trim().isEmpty()) {
-            throw new UniGramException("Product not found with ID: " + productId);
-        }
-        try (Connection conn = DatabaseConnectionFactory.getConnection(config)) {
-            Optional<ProductReference> prodOpt = productDao.findById(conn, productId.trim());
-            if (prodOpt.isEmpty()) {
-                throw new UniGramException("Product not found with ID: " + productId.trim());
-            }
-            return prodOpt.get();
-        } catch (SQLException e) {
-            throw new DatabaseException("Failed to retrieve product '" + productId + "': " + e.getMessage(), e);
-        }
-    }
-
-    /**
-     * Retrieves all active conversations from MySQL.
-     *
-     * @return Collection of Conversation entities
-     * @throws DatabaseException if database error occurs
-     */
-    public Collection<Conversation> getAllConversations() throws DatabaseException {
+    public List<Conversation> getAllConversations() throws DatabaseException {
         try (Connection conn = DatabaseConnectionFactory.getConnection(config)) {
             return conversationDao.findAll(conn);
         } catch (SQLException e) {
@@ -191,228 +185,11 @@ public class JdbcChatService {
         }
     }
 
-    /**
-     * Creates a new conversation in MySQL inside an atomic transaction.
-     *
-     * Validates:
-     * 1. Buyer and seller cannot be identical (self-conversation prohibited).
-     * 2. Buyer and seller must exist in the database.
-     * 3. Product reference must exist in the database.
-     * 4. Duplicate conversation for same buyer, seller, and product is rejected.
-     *
-     * @param buyerId   unique user ID of the buyer
-     * @param sellerId  unique user ID of the seller
-     * @param productId unique product reference ID
-     * @return the created Conversation entity
-     * @throws UserNotFoundException if buyer or seller does not exist
-     * @throws UniGramException      if product does not exist or duplicate conversation attempted
-     * @throws DatabaseException     if database transaction fails
-     */
-    public Conversation createConversation(String buyerId, String sellerId, String productId)
-            throws UserNotFoundException, UniGramException, DatabaseException {
-
-        if (buyerId == null || buyerId.trim().isEmpty()) {
-            throw new IllegalArgumentException("Buyer ID cannot be null or empty.");
-        }
-        if (sellerId == null || sellerId.trim().isEmpty()) {
-            throw new IllegalArgumentException("Seller ID cannot be null or empty.");
-        }
-        if (productId == null || productId.trim().isEmpty()) {
-            throw new IllegalArgumentException("Product ID cannot be null or empty.");
-        }
-
-        String cleanBuyerId = buyerId.trim();
-        String cleanSellerId = sellerId.trim();
-        String cleanProductId = productId.trim();
-
-        // 1. Domain validation: prevent self-conversation
-        if (cleanBuyerId.equalsIgnoreCase(cleanSellerId)) {
-            throw new IllegalArgumentException("A user cannot start a conversation with themselves (buyer and seller cannot be identical).");
-        }
-
-        try (Connection conn = DatabaseConnectionFactory.getConnection(config)) {
-            conn.setAutoCommit(false);
-            try {
-                // 2. Verify both users exist in database
-                if (!userDao.existsById(conn, cleanBuyerId)) {
-                    throw new UserNotFoundException(cleanBuyerId);
-                }
-                if (!userDao.existsById(conn, cleanSellerId)) {
-                    throw new UserNotFoundException(cleanSellerId);
-                }
-
-                // 3. Verify product reference exists in database
-                if (!productDao.existsById(conn, cleanProductId)) {
-                    throw new UniGramException("Product not found with ID: " + cleanProductId);
-                }
-
-                // 4. Prevent duplicate conversation for the same buyer, seller, and product
-                Optional<Conversation> existing = conversationDao.findByParticipantsAndProduct(conn, cleanBuyerId, cleanSellerId, cleanProductId);
-                if (existing.isPresent()) {
-                    throw new UniGramException(
-                            "Duplicate conversation: A conversation already exists between users '"
-                            + cleanBuyerId + "' and '" + cleanSellerId
-                            + "' for product '" + cleanProductId + "' (Conversation ID: " + existing.get().getConversationId() + ")."
-                    );
-                }
-
-                // 5. Generate unique conversation ID and insert
-                String conversationId = "conv_" + UUID.randomUUID().toString().replace("-", "").substring(0, 8);
-                Conversation conversation = new Conversation(conversationId, cleanBuyerId, cleanSellerId, cleanProductId, LocalDateTime.now());
-
-                conversationDao.insert(conn, conversation);
-
-                conn.commit();
-                return conversation;
-
-            } catch (SQLException e) {
-                conn.rollback();
-                if ("23000".equals(e.getSQLState())) {
-                    throw new UniGramException("Database integrity constraint violation during conversation creation: " + e.getMessage());
-                }
-                throw new DatabaseException("Failed to persist conversation: " + e.getMessage(), e);
-            } catch (Exception e) {
-                conn.rollback();
-                throw e;
-            } finally {
-                conn.setAutoCommit(true);
-            }
-        } catch (SQLException e) {
-            throw new DatabaseException("Database connection error: " + e.getMessage(), e);
-        }
-    }
-
-    /**
-     * Starts or retrieves an existing direct student-to-student conversation in MySQL.
-     * Guarantees no duplicate direct conversations even when initiated concurrently.
-     *
-     * @param initiatorId initiating student's ID
-     * @param recipientId recipient student's ID
-     * @return existing or newly created direct Conversation entity
-     * @throws UserNotFoundException if either student does not exist
-     * @throws UniGramException      if a database integrity error occurs
-     * @throws DatabaseException     if database transaction fails
-     */
-    public Conversation startDirectConversation(String initiatorId, String recipientId)
-            throws UserNotFoundException, UniGramException, DatabaseException {
-
-        if (initiatorId == null || initiatorId.trim().isEmpty()) {
-            throw new IllegalArgumentException("Initiating student ID cannot be null or empty.");
-        }
-        if (recipientId == null || recipientId.trim().isEmpty()) {
-            throw new IllegalArgumentException("Recipient student ID cannot be null or empty.");
-        }
-
-        String cleanInitiatorId = initiatorId.trim();
-        String cleanRecipientId = recipientId.trim();
-
-        if (cleanInitiatorId.equalsIgnoreCase(cleanRecipientId)) {
-            throw new IllegalArgumentException("A student cannot start a conversation with themselves.");
-        }
-
-        try (Connection conn = DatabaseConnectionFactory.getConnection(config)) {
-            conn.setAutoCommit(false);
-            try {
-                if (!userDao.existsById(conn, cleanInitiatorId)) {
-                    throw new UserNotFoundException(cleanInitiatorId);
-                }
-                if (!userDao.existsById(conn, cleanRecipientId)) {
-                    throw new UserNotFoundException(cleanRecipientId);
-                }
-
-                Optional<Conversation> existing = conversationDao.findDirectByParticipants(conn, cleanInitiatorId, cleanRecipientId);
-                if (existing.isPresent()) {
-                    conn.commit();
-                    return existing.get();
-                }
-
-                String conversationId = "conv_" + UUID.randomUUID().toString().replace("-", "").substring(0, 8);
-                Conversation conversation = new Conversation(conversationId, cleanInitiatorId, cleanRecipientId, LocalDateTime.now());
-                conversationDao.insert(conn, conversation);
-                conn.commit();
-                return conversation;
-
-            } catch (SQLException e) {
-                conn.rollback();
-                if ("23000".equals(e.getSQLState())) {
-                    // Concurrent initiation hit unique direct_pair_key constraint; retrieve the committed thread
-                    Optional<Conversation> concurrentExisting = conversationDao.findDirectByParticipants(conn, cleanInitiatorId, cleanRecipientId);
-                    if (concurrentExisting.isPresent()) {
-                        return concurrentExisting.get();
-                    }
-                    throw new UniGramException("Database integrity constraint violation during direct conversation creation: " + e.getMessage());
-                }
-                throw new DatabaseException("Failed to persist direct conversation: " + e.getMessage(), e);
-            } catch (Exception e) {
-                conn.rollback();
-                throw e;
-            } finally {
-                conn.setAutoCommit(true);
-            }
-        } catch (SQLException e) {
-            throw new DatabaseException("Database connection error: " + e.getMessage(), e);
-        }
-    }
-
-    /**
-     * Retrieves a conversation by its unique ID from MySQL.
-     *
-     * @param conversationId conversation identifier
-     * @return Conversation entity
-     * @throws ConversationNotFoundException if conversation does not exist
-     * @throws DatabaseException             if database error occurs
-     */
-    public Conversation getConversationById(String conversationId) throws ConversationNotFoundException, DatabaseException {
-        if (conversationId == null || conversationId.trim().isEmpty()) {
-            throw new ConversationNotFoundException(conversationId != null ? conversationId : "null");
-        }
-        try (Connection conn = DatabaseConnectionFactory.getConnection(config)) {
-            Optional<Conversation> convOpt = conversationDao.findById(conn, conversationId.trim());
-            if (convOpt.isEmpty()) {
-                throw new ConversationNotFoundException(conversationId.trim());
-            }
-            return convOpt.get();
-        } catch (SQLException e) {
-            throw new DatabaseException("Failed to retrieve conversation: " + e.getMessage(), e);
-        }
-    }
-
-    /**
-     * Retrieves all conversations in which the specified user participates.
-     *
-     * @param userId user identifier
-     * @return List of conversations belonging to user, ordered newest first
-     * @throws UserNotFoundException if user does not exist
-     * @throws DatabaseException     if database error occurs
-     */
-    public List<Conversation> getConversationsForUser(String userId) throws UserNotFoundException, DatabaseException {
-        getUser(userId); // Verifies user exists
-        try (Connection conn = DatabaseConnectionFactory.getConnection(config)) {
-            return conversationDao.findByParticipant(conn, userId.trim());
-        } catch (SQLException e) {
-            throw new DatabaseException("Failed to retrieve conversations for user '" + userId + "': " + e.getMessage(), e);
-        }
-    }
-
-    /**
-     * Verifies that a user is an authorized participant in the conversation.
-     *
-     * @param conversationId target conversation ID
-     * @param userId         user identifier
-     * @throws ConversationNotFoundException            if conversation does not exist
-     * @throws UnauthorizedConversationAccessException if user is neither buyer nor seller
-     * @throws DatabaseException                        if database error occurs
-     */
-    public void validateParticipant(String conversationId, String userId)
+    public void validateParticipant(String conversationId, String studentId)
             throws ConversationNotFoundException, UnauthorizedConversationAccessException, DatabaseException {
-
         Conversation conv = getConversationById(conversationId);
-        if (!conv.isParticipant(userId)) {
-            throw new UnauthorizedConversationAccessException(userId, conversationId);
+        if (!conv.isParticipant(studentId)) {
+            throw new UnauthorizedConversationAccessException(studentId, conversationId);
         }
-    }
-
-    public DatabaseConfig getConfig() {
-        return config;
     }
 }

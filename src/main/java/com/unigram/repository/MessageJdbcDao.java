@@ -12,14 +12,13 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Data Access Object (DAO) for Message entities using pure JDBC.
- * Retrieves message threads in strict chronological order using parameterized queries.
+ * JDBC Data Access Object for chat messages, ordered chronologically.
  */
 public class MessageJdbcDao {
 
     public boolean insert(Connection conn, Message message) throws SQLException {
-        String sql = "INSERT INTO messages (message_id, conversation_id, sender_id, content, sent_at) " +
-                     "VALUES (?, ?, ?, ?, ?)";
+        String sql = "INSERT INTO messages (message_id, conversation_id, sender_id, content, sent_at) "
+                + "VALUES (?, ?, ?, ?, ?)";
         try (PreparedStatement stmt = conn.prepareStatement(sql)) {
             stmt.setString(1, message.getMessageId());
             stmt.setString(2, message.getConversationId());
@@ -31,15 +30,14 @@ public class MessageJdbcDao {
     }
 
     public List<Message> findByConversationId(Connection conn, String conversationId) throws SQLException {
-        String sql = "SELECT message_id, conversation_id, sender_id, content, sent_at " +
-                     "FROM messages WHERE conversation_id = ? " +
-                     "ORDER BY sent_at ASC";
+        String sql = "SELECT message_id, conversation_id, sender_id, content, sent_at "
+                + "FROM messages WHERE conversation_id = ? ORDER BY sent_at ASC";
         List<Message> list = new ArrayList<>();
         try (PreparedStatement stmt = conn.prepareStatement(sql)) {
             stmt.setString(1, conversationId);
             try (ResultSet rs = stmt.executeQuery()) {
                 while (rs.next()) {
-                    list.add(mapRowToMessage(rs));
+                    list.add(mapRow(rs));
                 }
             }
         }
@@ -47,14 +45,13 @@ public class MessageJdbcDao {
     }
 
     public Optional<Message> findLatestByConversationId(Connection conn, String conversationId) throws SQLException {
-        String sql = "SELECT message_id, conversation_id, sender_id, content, sent_at " +
-                     "FROM messages WHERE conversation_id = ? " +
-                     "ORDER BY sent_at DESC LIMIT 1";
+        String sql = "SELECT message_id, conversation_id, sender_id, content, sent_at "
+                + "FROM messages WHERE conversation_id = ? ORDER BY sent_at DESC LIMIT 1";
         try (PreparedStatement stmt = conn.prepareStatement(sql)) {
             stmt.setString(1, conversationId);
             try (ResultSet rs = stmt.executeQuery()) {
                 if (rs.next()) {
-                    return Optional.of(mapRowToMessage(rs));
+                    return Optional.of(mapRow(rs));
                 }
             }
         }
@@ -74,15 +71,7 @@ public class MessageJdbcDao {
         return 0;
     }
 
-    public boolean delete(Connection conn, String messageId) throws SQLException {
-        String sql = "DELETE FROM messages WHERE message_id = ?";
-        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
-            stmt.setString(1, messageId);
-            return stmt.executeUpdate() > 0;
-        }
-    }
-
-    private Message mapRowToMessage(ResultSet rs) throws SQLException {
+    private Message mapRow(ResultSet rs) throws SQLException {
         Timestamp ts = rs.getTimestamp("sent_at");
         return new Message(
                 rs.getString("message_id"),

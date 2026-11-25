@@ -1,8 +1,7 @@
 package com.unigram.exception;
 
 /**
- * Common base checked exception for all Uni-Gram domain exceptions.
- * Serves as the root of the application's checked exception hierarchy.
+ * Base checked exception for Uni-Gram domain errors.
  */
 public class UniGramException extends Exception {
 
@@ -12,9 +11,5 @@ public class UniGramException extends Exception {
 
     public UniGramException(String message, Throwable cause) {
         super(message, cause);
-    }
-
-    public UniGramException(Throwable cause) {
-        super(cause);
     }
 }
