@@ -19,7 +19,7 @@ A minimal, standalone Java terminal application for student-to-student messaging
    ```sql
    SOURCE database/schema.sql;
    ```
-   *(Or open `database/schema.sql` in MySQL Workbench and execute the script.)*
+   *(Or open `database/schema.sql` in MySQL Workbench and execute the script. Demo students `student_a` through `student_e` use default password `student123` on first login.)*
 
 ---
 

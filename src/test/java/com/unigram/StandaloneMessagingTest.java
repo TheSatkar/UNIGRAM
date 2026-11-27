@@ -23,8 +23,8 @@ import java.util.concurrent.Future;
 
 /**
  * Targeted MySQL integration test for the standalone Uni-Gram application.
- * Uses a dedicated test schema (unigram_standalone_test_db) so production/demo
- * data in unigram_standalone_db and unigram_db is never touched.
+ * Uses a dedicated test schema (unigram_standalone_test_db) so demo data
+ * in unigram_standalone_db is never touched.
  */
 public class StandaloneMessagingTest {
 
@@ -52,7 +52,6 @@ public class StandaloneMessagingTest {
             System.exit(1);
         }
 
-        // Create an isolated test database using the configured user/password
         String baseUrl = baseConfig.getUrl();
         String serverUrl = baseUrl.replace("unigram_standalone_db", "mysql");
         DatabaseConfig serverConfig = new DatabaseConfig(serverUrl, baseConfig.getUser(), baseConfig.getPassword());
@@ -64,7 +63,8 @@ public class StandaloneMessagingTest {
             st.execute("USE unigram_standalone_test_db");
             st.execute("CREATE TABLE users ("
                     + "user_id VARCHAR(64) NOT NULL, display_name VARCHAR(128) NOT NULL, "
-                    + "email VARCHAR(128) NOT NULL, created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3), "
+                    + "email VARCHAR(128) NOT NULL, password_hash VARCHAR(255) NOT NULL DEFAULT '', "
+                    + "created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3), "
                     + "PRIMARY KEY (user_id), UNIQUE KEY uq_user_email (email)) ENGINE=InnoDB");
             st.execute("CREATE TABLE conversations ("
                     + "conversation_id VARCHAR(64) NOT NULL, participant_one_id VARCHAR(64) NOT NULL, "
@@ -90,29 +90,41 @@ public class StandaloneMessagingTest {
             JdbcChatService chat = new JdbcChatService(testConfig);
             JdbcMessageService msg = new JdbcMessageService(testConfig, chat);
 
-            // 1. Student registration & duplicate rejection
-            chat.registerUser(new User("stu_1", "Alice", "alice@chitkara.edu.in"));
-            chat.registerUser(new User("stu_2", "Bob", "bob@chitkara.edu.in"));
-            chat.registerUser(new User("stu_3", "Charlie", "charlie@chitkara.edu.in"));
+            // 1. Student registration with passwords & duplicate rejection
+            chat.registerUser("stu_1", "Alice", "alice@chitkara.edu.in", "pass111");
+            chat.registerUser("stu_2", "Bob", "bob@chitkara.edu.in", "pass222");
+            chat.registerUser("stu_3", "Charlie", "charlie@chitkara.edu.in", "pass333");
             check("Registered 3 students in MySQL", chat.getAllUsers().size() == 3);
 
             boolean dupIdRejected = false;
-            try { chat.registerUser(new User("stu_1", "Dup", "dup@chitkara.edu.in")); } catch (UniGramException e) { dupIdRejected = true; }
+            try { chat.registerUser("stu_1", "Dup", "dup@chitkara.edu.in", "pass111"); } catch (UniGramException e) { dupIdRejected = true; }
             check("Duplicate student ID rejected", dupIdRejected);
 
             boolean dupEmailRejected = false;
-            try { chat.registerUser(new User("stu_4", "DupEmail", "alice@chitkara.edu.in")); } catch (UniGramException e) { dupEmailRejected = true; }
+            try { chat.registerUser("stu_4", "DupEmail", "alice@chitkara.edu.in", "pass444"); } catch (UniGramException e) { dupEmailRejected = true; }
             check("Duplicate email rejected", dupEmailRejected);
 
-            // 2. Direct conversation & reverse-direction deduplication
+            // 2. Authentication checks
+            User authed = chat.authenticate("stu_1", "pass111");
+            check("Valid student login succeeds", authed != null && "stu_1".equals(authed.getUserId()));
+
+            boolean wrongPassRejected = false;
+            try { chat.authenticate("stu_1", "wrongpass"); } catch (UniGramException e) { wrongPassRejected = true; }
+            check("Wrong password rejected", wrongPassRejected);
+
+            boolean unknownUserRejected = false;
+            try { chat.authenticate("unknown_99", "pass111"); } catch (UniGramException e) { unknownUserRejected = true; }
+            check("Unknown student login rejected", unknownUserRejected);
+
+            // 3. Direct conversation & reverse-direction deduplication
             Conversation conv = chat.startOrGetConversation("stu_1", "stu_2");
             Conversation sameConv = chat.startOrGetConversation("stu_1", "stu_2");
             Conversation reverseConv = chat.startOrGetConversation("stu_2", "stu_1");
-            check("Direct conversation created", conv != null);
+            check("Direct conversation created with simple ID (conv_1)", conv != null && "conv_1".equals(conv.getConversationId()));
             check("Duplicate conversation returns same ID", conv.getConversationId().equals(sameConv.getConversationId()));
             check("Reverse-direction initiation returns same ID", conv.getConversationId().equals(reverseConv.getConversationId()));
 
-            // 3. Invalid & self-conversation rejection
+            // 4. Invalid & self-conversation rejection
             boolean missingUserRejected = false;
             try { chat.startOrGetConversation("stu_1", "unknown_99"); } catch (UserNotFoundException e) { missingUserRejected = true; }
             check("Invalid student ID rejected", missingUserRejected);
@@ -121,11 +133,12 @@ public class StandaloneMessagingTest {
             try { chat.startOrGetConversation("stu_1", "stu_1"); } catch (IllegalArgumentException e) { selfRejected = true; }
             check("Self-conversation rejected", selfRejected);
 
-            // 4. Conversations listed for both participants
+            // 5. Conversations isolated to participants
             check("Participant 1 sees conversation", chat.getConversationsForUser("stu_1").size() == 1);
             check("Participant 2 sees conversation", chat.getConversationsForUser("stu_2").size() == 1);
+            check("Non-participant Charlie sees 0 conversations", chat.getConversationsForUser("stu_3").isEmpty());
 
-            // 5. Bidirectional messaging, empty message rejection, unauthorized access, chronological order
+            // 6. Bidirectional messaging, empty message rejection, unauthorized access, chronological order
             msg.sendMessage(conv.getConversationId(), "stu_1", "Hello Bob!");
             Thread.sleep(10);
             msg.sendMessage(conv.getConversationId(), "stu_2", "Hi Alice!");
@@ -138,7 +151,7 @@ public class StandaloneMessagingTest {
             try { msg.getMessageHistory(conv.getConversationId(), "stu_3"); } catch (UnauthorizedConversationAccessException e) { unauthRejected = true; }
             check("Nonparticipant access rejected", unauthRejected);
 
-            // 6. Restart persistence check using fresh service instances
+            // 7. Restart persistence check using fresh service instances
             JdbcChatService freshChat = new JdbcChatService(testConfig);
             JdbcMessageService freshMsg = new JdbcMessageService(testConfig, freshChat);
             List<Message> history = freshMsg.getMessageHistory(conv.getConversationId(), "stu_1");
@@ -147,7 +160,7 @@ public class StandaloneMessagingTest {
                             && "Hello Bob!".equals(history.get(0).getContent())
                             && "Hi Alice!".equals(history.get(1).getContent()));
 
-            // 7. Concurrent conversation initiation safety
+            // 8. Concurrent conversation initiation safety
             ExecutorService pool = Executors.newFixedThreadPool(4);
             List<Callable<String>> tasks = new ArrayList<>();
             for (int i = 0; i < 4; i++) {

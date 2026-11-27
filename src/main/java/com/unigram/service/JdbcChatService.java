@@ -17,11 +17,10 @@ import java.sql.SQLException;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
-import java.util.UUID;
 
 /**
- * Service managing student registration and direct one-to-one conversations
- * backed by MySQL via JDBC transactions.
+ * Service managing student registration, authentication, and direct
+ * one-to-one conversations backed by MySQL via JDBC transactions.
  */
 public class JdbcChatService {
 
@@ -39,12 +38,17 @@ public class JdbcChatService {
     }
 
     /**
-     * Registers a new student in MySQL, rejecting duplicate IDs or emails.
+     * Registers a new student with a salted SHA-256 password hash,
+     * rejecting duplicate student IDs or emails.
      */
-    public void registerUser(User user) throws DatabaseException, UniGramException {
-        if (user == null) {
-            throw new IllegalArgumentException("Student cannot be null.");
+    public User registerUser(String studentId, String fullName, String email, String rawPassword)
+            throws DatabaseException, UniGramException {
+        if (rawPassword == null || rawPassword.trim().length() < 4) {
+            throw new IllegalArgumentException("Password must be at least 4 characters long.");
         }
+        String hash = PasswordUtil.hashPassword(rawPassword);
+        User user = new User(studentId, fullName, email, hash);
+
         try (Connection conn = DatabaseConnectionFactory.getConnection(config)) {
             if (userDao.existsById(conn, user.getUserId())) {
                 throw new UniGramException("A student is already registered with ID: " + user.getUserId());
@@ -53,11 +57,54 @@ public class JdbcChatService {
                 throw new UniGramException("A student is already registered with email: " + user.getEmail());
             }
             userDao.insert(conn, user);
+            return user;
         } catch (SQLException e) {
             if ("23000".equals(e.getSQLState())) {
                 throw new UniGramException("Duplicate student ID or email is not allowed.");
             }
             throw new DatabaseException("Failed to register student: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Authenticates a student by ID and password.
+     * Demo accounts seeded without a password hash default to "student123" on first login.
+     */
+    public User authenticate(String studentId, String rawPassword)
+            throws DatabaseException, UniGramException {
+        if (studentId == null || studentId.trim().isEmpty()) {
+            throw new IllegalArgumentException("Student ID cannot be empty.");
+        }
+        if (rawPassword == null || rawPassword.isEmpty()) {
+            throw new IllegalArgumentException("Password cannot be empty.");
+        }
+
+        String cleanId = studentId.trim();
+        try (Connection conn = DatabaseConnectionFactory.getConnection(config)) {
+            Optional<User> found = userDao.findById(conn, cleanId);
+            if (found.isEmpty()) {
+                throw new UniGramException("Invalid student ID or password.");
+            }
+            User user = found.get();
+            String storedHash = user.getPasswordHash();
+
+            // Initialize salted hash on first login for SQL-seeded demo accounts
+            if (storedHash == null || storedHash.isEmpty()) {
+                if ("student123".equals(rawPassword)) {
+                    String newHash = PasswordUtil.hashPassword(rawPassword);
+                    userDao.updatePasswordHash(conn, user.getUserId(), newHash);
+                    user.setPasswordHash(newHash);
+                    return user;
+                }
+                throw new UniGramException("Invalid student ID or password.");
+            }
+
+            if (!PasswordUtil.verifyPassword(rawPassword, storedHash)) {
+                throw new UniGramException("Invalid student ID or password.");
+            }
+            return user;
+        } catch (SQLException e) {
+            throw new DatabaseException("Authentication failed due to database error: " + e.getMessage(), e);
         }
     }
 
@@ -87,7 +134,6 @@ public class JdbcChatService {
     /**
      * Starts a direct conversation between two students, or returns the existing
      * conversation if one already exists in either direction.
-     * Safe against concurrent duplicate creation via database unique key handling.
      */
     public Conversation startOrGetConversation(String initiatorId, String recipientId)
             throws UserNotFoundException, UniGramException, DatabaseException {
@@ -122,7 +168,7 @@ public class JdbcChatService {
                     return existing.get();
                 }
 
-                String conversationId = "conv_" + UUID.randomUUID().toString().replace("-", "").substring(0, 8);
+                String conversationId = conversationDao.generateNextConversationId(conn);
                 Conversation conversation = new Conversation(conversationId, cleanInitiator, cleanRecipient, LocalDateTime.now());
                 conversationDao.insert(conn, conversation);
                 conn.commit();
@@ -131,7 +177,6 @@ public class JdbcChatService {
             } catch (SQLException e) {
                 conn.rollback();
                 if ("23000".equals(e.getSQLState())) {
-                    // Concurrent creation hit the unique pair index; retrieve the committed row
                     Optional<Conversation> concurrentExisting =
                             conversationDao.findByParticipants(conn, cleanInitiator, cleanRecipient);
                     if (concurrentExisting.isPresent()) {
@@ -174,14 +219,6 @@ public class JdbcChatService {
             return conversationDao.findByParticipant(conn, studentId.trim());
         } catch (SQLException e) {
             throw new DatabaseException("Failed to retrieve conversations: " + e.getMessage(), e);
-        }
-    }
-
-    public List<Conversation> getAllConversations() throws DatabaseException {
-        try (Connection conn = DatabaseConnectionFactory.getConnection(config)) {
-            return conversationDao.findAll(conn);
-        } catch (SQLException e) {
-            throw new DatabaseException("Failed to list conversations: " + e.getMessage(), e);
         }
     }
 

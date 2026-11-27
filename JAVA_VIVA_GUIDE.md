@@ -8,7 +8,8 @@ This guide covers every Java class in the standalone **Uni-Gram** project, how t
 
 | File | Package | ~Lines | Purpose & Key Methods |
 |---|---|---|---|
-| `Main.java` | `com.unigram` | ~225 | Terminal UI and menu loop (`run`, `printMainMenu`, `ensureDatabaseReady`, `handleViewStudents`, `handleRegisterStudent`, `handleStartConversation`, `handleViewMyConversations`, `handleOpenConversation`) |
+| `Main.java` | `com.unigram` | ~265 | Terminal UI, session state (`currentUser`), login/register and logged-in menu (`handleLogin`, `handleRegisterStudent`, `handleViewStudents`, `handleStartConversation`, `handleViewMyConversations`, `handleOpenConversation`) |
+| `PasswordUtil.java` | `com.unigram.service` | ~55 | Salted SHA-256 password hashing & constant-time verification (`hashPassword`, `verifyPassword`) |
 | `User.java` | `com.unigram.model` | ~65 | Student entity (`userId`, `fullName`, `email`, validation in constructor/setters, `equals`, `hashCode`) |
 | `Conversation.java` | `com.unigram.model` | ~80 | Direct 1-to-1 chat entity (`isParticipant`, `getOtherParticipantId`, overloaded constructors) |
 | `Message.java` | `com.unigram.model` | ~70 | Chat message entity (`messageId`, `conversationId`, `senderId`, `content`, `sentAt`) |

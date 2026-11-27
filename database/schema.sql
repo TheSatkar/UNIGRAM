@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS users (
     user_id VARCHAR(64) NOT NULL,
     display_name VARCHAR(128) NOT NULL,
     email VARCHAR(128) NOT NULL,
+    password_hash VARCHAR(255) NOT NULL DEFAULT '',
     created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     PRIMARY KEY (user_id),
     UNIQUE KEY uq_user_email (email),

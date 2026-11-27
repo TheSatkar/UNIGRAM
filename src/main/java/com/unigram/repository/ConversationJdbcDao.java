@@ -96,6 +96,30 @@ public class ConversationJdbcDao {
         return list;
     }
 
+    /**
+     * Generates the next simple sequential conversation ID (conv_1, conv_2, ...).
+     */
+    public String generateNextConversationId(Connection conn) throws SQLException {
+        String sql = "SELECT conversation_id FROM conversations";
+        int max = 0;
+        try (PreparedStatement stmt = conn.prepareStatement(sql);
+             ResultSet rs = stmt.executeQuery()) {
+            while (rs.next()) {
+                String id = rs.getString("conversation_id");
+                if (id != null && id.startsWith("conv_")) {
+                    try {
+                        int num = Integer.parseInt(id.substring(5));
+                        if (num > max) {
+                            max = num;
+                        }
+                    } catch (NumberFormatException ignored) {
+                    }
+                }
+            }
+        }
+        return "conv_" + (max + 1);
+    }
+
     private Conversation mapRow(ResultSet rs) throws SQLException {
         Timestamp ts = rs.getTimestamp("created_at");
         return new Conversation(

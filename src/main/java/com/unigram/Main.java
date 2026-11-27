@@ -28,12 +28,14 @@ public class Main {
     private final JdbcChatService chatService;
     private final JdbcMessageService messageService;
     private final Scanner scanner;
+    private User currentUser;
 
     public Main(DatabaseConfig databaseConfig, Scanner scanner) {
         this.databaseConfig = databaseConfig;
         this.chatService = new JdbcChatService(databaseConfig);
         this.messageService = new JdbcMessageService(databaseConfig, this.chatService);
         this.scanner = scanner;
+        this.currentUser = null;
     }
 
     public static void main(String[] args) {
@@ -53,37 +55,69 @@ public class Main {
 
         boolean running = true;
         while (running) {
-            printMainMenu();
-            System.out.print("Select an option [0-5]: ");
-            String choice = scanner.nextLine().trim();
-            System.out.println();
-
-            switch (choice) {
-                case "1" -> handleViewStudents();
-                case "2" -> handleRegisterStudent();
-                case "3" -> handleStartConversation();
-                case "4" -> handleViewMyConversations();
-                case "5" -> handleOpenConversation();
-                case "0" -> {
-                    System.out.println("Exiting Uni-Gram. Goodbye!");
-                    running = false;
-                }
-                default -> System.out.println("[!] Invalid choice. Please enter a number between 0 and 5.\n");
+            if (currentUser == null) {
+                running = handleGuestMenu();
+            } else {
+                running = handleLoggedInMenu();
             }
         }
     }
 
-    private void printMainMenu() {
-        System.out.println("MAIN MENU");
+    private boolean handleGuestMenu() {
+        System.out.println("WELCOME");
         System.out.println("----------------------------------------------------------------------");
-        System.out.println("1. View Registered Students");
+        System.out.println("1. Login");
         System.out.println("2. Register New Student");
-        System.out.println("3. Start a Conversation");
-        System.out.println("4. View My Conversations");
-        System.out.println("5. Open Conversation & Send Messages");
         System.out.println();
         System.out.println("0. Exit Uni-Gram");
         System.out.println("----------------------------------------------------------------------");
+        System.out.print("Select an option [0-2]: ");
+        String choice = scanner.nextLine().trim();
+        System.out.println();
+
+        switch (choice) {
+            case "1" -> handleLogin();
+            case "2" -> handleRegisterStudent();
+            case "0" -> {
+                System.out.println("Exiting Uni-Gram. Goodbye!");
+                return false;
+            }
+            default -> System.out.println("[!] Invalid choice. Please enter 0, 1, or 2.\n");
+        }
+        return true;
+    }
+
+    private boolean handleLoggedInMenu() {
+        System.out.println("MAIN MENU  [Logged in as: " + currentUser.getFullName() + " (" + currentUser.getUserId() + ")]");
+        System.out.println("----------------------------------------------------------------------");
+        System.out.println("1. View Registered Students");
+        System.out.println("2. Start a Conversation");
+        System.out.println("3. View My Conversations");
+        System.out.println("4. Open Conversation & Send Messages");
+        System.out.println("5. Sign Out");
+        System.out.println();
+        System.out.println("0. Exit Uni-Gram");
+        System.out.println("----------------------------------------------------------------------");
+        System.out.print("Select an option [0-5]: ");
+        String choice = scanner.nextLine().trim();
+        System.out.println();
+
+        switch (choice) {
+            case "1" -> handleViewStudents();
+            case "2" -> handleStartConversation();
+            case "3" -> handleViewMyConversations();
+            case "4" -> handleOpenConversation();
+            case "5" -> {
+                System.out.println("[OK] Signed out from " + currentUser.getUserId() + ".\n");
+                currentUser = null;
+            }
+            case "0" -> {
+                System.out.println("Exiting Uni-Gram. Goodbye!");
+                return false;
+            }
+            default -> System.out.println("[!] Invalid choice. Please enter a number between 0 and 5.\n");
+        }
+        return true;
     }
 
     private boolean ensureDatabaseReady() {
@@ -101,6 +135,49 @@ public class Main {
         } catch (Exception e) {
             System.out.println("[!] Database error: " + e.getMessage() + "\n");
             return false;
+        }
+    }
+
+    private void handleLogin() {
+        System.out.println("--- Student Login ---");
+        if (!ensureDatabaseReady()) return;
+
+        try {
+            System.out.print("Enter Student ID : ");
+            String studentId = scanner.nextLine().trim();
+            System.out.print("Enter Password   : ");
+            String password = scanner.nextLine();
+
+            currentUser = chatService.authenticate(studentId, password);
+            System.out.println("[OK] Welcome, " + currentUser.getFullName() + " (" + currentUser.getUserId() + ")!\n");
+        } catch (IllegalArgumentException | UniGramException e) {
+            System.out.println("[!] Login failed: " + e.getMessage() + "\n");
+        } catch (DatabaseException e) {
+            System.out.println("[!] Database Error: " + e.getMessage() + "\n");
+        }
+    }
+
+    private void handleRegisterStudent() {
+        System.out.println("--- Register New Student ---");
+        if (!ensureDatabaseReady()) return;
+
+        try {
+            System.out.print("Enter Student ID (e.g., student_f) : ");
+            String id = scanner.nextLine().trim();
+            System.out.print("Enter Full Name                   : ");
+            String name = scanner.nextLine().trim();
+            System.out.print("Enter University Email            : ");
+            String email = scanner.nextLine().trim();
+            System.out.print("Create Password (min 4 chars)     : ");
+            String password = scanner.nextLine();
+
+            User student = chatService.registerUser(id, name, email, password);
+            System.out.println("[OK] Student registered: " + student.getFullName() + " (" + student.getUserId() + ")");
+            System.out.println("     You can now log in using Option 1.\n");
+        } catch (IllegalArgumentException | UniGramException e) {
+            System.out.println("[!] Registration rejected: " + e.getMessage() + "\n");
+        } catch (DatabaseException e) {
+            System.out.println("[!] Database Error: " + e.getMessage() + "\n");
         }
     }
 
@@ -124,48 +201,24 @@ public class Main {
         }
     }
 
-    private void handleRegisterStudent() {
-        System.out.println("--- Register New Student ---");
-        if (!ensureDatabaseReady()) return;
-
-        try {
-            System.out.print("Enter Student ID (e.g., student_f): ");
-            String id = scanner.nextLine().trim();
-            System.out.print("Enter Full Name                  : ");
-            String name = scanner.nextLine().trim();
-            System.out.print("Enter University Email           : ");
-            String email = scanner.nextLine().trim();
-
-            User student = new User(id, name, email);
-            chatService.registerUser(student);
-            System.out.println("[OK] Student registered: " + student.getFullName() + " (" + student.getUserId() + ")\n");
-        } catch (IllegalArgumentException | UniGramException e) {
-            System.out.println("[!] Registration rejected: " + e.getMessage() + "\n");
-        } catch (DatabaseException e) {
-            System.out.println("[!] Database Error: " + e.getMessage() + "\n");
-        }
-    }
-
     private void handleStartConversation() {
         System.out.println("--- Start a Conversation ---");
         if (!ensureDatabaseReady()) return;
 
         try {
             List<User> students = chatService.getAllUsers();
-            if (!students.isEmpty()) {
-                System.out.println("Registered Students:");
-                for (User student : students) {
+            System.out.println("Other Registered Students:");
+            for (User student : students) {
+                if (!student.getUserId().equalsIgnoreCase(currentUser.getUserId())) {
                     System.out.printf("  - %-14s (%s)%n", student.getUserId(), student.getFullName());
                 }
-                System.out.println();
             }
+            System.out.println();
 
-            System.out.print("Enter Your Student ID      : ");
-            String initiatorId = scanner.nextLine().trim();
             System.out.print("Enter Recipient Student ID : ");
             String recipientId = scanner.nextLine().trim();
 
-            Conversation conv = chatService.startOrGetConversation(initiatorId, recipientId);
+            Conversation conv = chatService.startOrGetConversation(currentUser.getUserId(), recipientId);
             System.out.println("[OK] Conversation ready!");
             System.out.println("     Conversation ID : " + conv.getConversationId());
             System.out.println("     Participants    : " + conv.getParticipantOneId() + " <-> " + conv.getParticipantTwoId());
@@ -180,22 +233,19 @@ public class Main {
     }
 
     private void handleViewMyConversations() {
-        System.out.println("--- View My Conversations ---");
+        System.out.println("--- My Conversations (" + currentUser.getUserId() + ") ---");
         if (!ensureDatabaseReady()) return;
 
-        System.out.print("Enter Your Student ID: ");
-        String studentId = scanner.nextLine().trim();
-
         try {
-            List<Conversation> conversations = chatService.getConversationsForUser(studentId);
+            List<Conversation> conversations = chatService.getConversationsForUser(currentUser.getUserId());
             if (conversations.isEmpty()) {
-                System.out.println("No conversations found for student: " + studentId + "\n");
+                System.out.println("You have no conversations yet. Use Option 2 to start one.\n");
                 return;
             }
 
-            System.out.println("Conversations for " + studentId + " (" + conversations.size() + "):");
+            System.out.println("Your active conversations (" + conversations.size() + "):");
             for (Conversation conv : conversations) {
-                String otherId = conv.getOtherParticipantId(studentId);
+                String otherId = conv.getOtherParticipantId(currentUser.getUserId());
                 String otherDisplay = otherId;
                 try {
                     User other = chatService.getUser(otherId);
@@ -219,21 +269,23 @@ public class Main {
         if (!ensureDatabaseReady()) return;
 
         try {
-            List<Conversation> all = chatService.getAllConversations();
-            if (all.isEmpty()) {
-                System.out.println("No conversations exist yet. Use Option 3 to start one.\n");
+            List<Conversation> myConversations = chatService.getConversationsForUser(currentUser.getUserId());
+            if (myConversations.isEmpty()) {
+                System.out.println("You have no conversations yet. Use Option 2 to start one.\n");
                 return;
             }
 
-            System.out.println("Available Conversations:");
-            for (Conversation c : all) {
-                System.out.printf("  -> ID: %-14s | Participants: %s <-> %s%n",
-                        c.getConversationId(), c.getParticipantOneId(), c.getParticipantTwoId());
+            System.out.println("Your Conversations:");
+            for (Conversation c : myConversations) {
+                String otherId = c.getOtherParticipantId(currentUser.getUserId());
+                System.out.printf("  -> ID: %-14s | With: %s%n", c.getConversationId(), otherId);
             }
             System.out.println();
 
             System.out.print("Enter Conversation ID to open: ");
             String convId = scanner.nextLine().trim();
+
+            chatService.validateParticipant(convId, currentUser.getUserId());
             Conversation conv = chatService.getConversationById(convId);
 
             boolean inChat = true;
@@ -252,54 +304,41 @@ public class Main {
 
                 switch (action) {
                     case "1" -> {
-                        System.out.print("Enter Your Student ID to verify access: ");
-                        String viewerId = scanner.nextLine().trim();
-                        try {
-                            List<Message> history = messageService.getMessageHistory(conv.getConversationId(), viewerId);
-                            System.out.println("\n--- Message History (" + history.size() + " messages) ---");
-                            if (history.isEmpty()) {
-                                System.out.println("No messages yet in this conversation.");
-                            } else {
-                                for (int i = 0; i < history.size(); i++) {
-                                    Message m = history.get(i);
-                                    System.out.printf("  [%d] %-14s (%s):%n      \"%s\"%n",
-                                            (i + 1), m.getSenderId(), m.getSentAt(), m.getContent());
-                                }
+                        List<Message> history = messageService.getMessageHistory(
+                                conv.getConversationId(), currentUser.getUserId());
+                        System.out.println("--- Message History (" + history.size() + " messages) ---");
+                        if (history.isEmpty()) {
+                            System.out.println("No messages yet in this conversation.");
+                        } else {
+                            for (int i = 0; i < history.size(); i++) {
+                                Message m = history.get(i);
+                                System.out.printf("  [%d] %-14s (%s):%n      \"%s\"%n",
+                                        (i + 1), m.getSenderId(), m.getSentAt(), m.getContent());
                             }
-                        } catch (UnauthorizedConversationAccessException e) {
-                            System.out.println("[!] Access Denied: " + e.getMessage());
                         }
                     }
                     case "2" -> {
-                        System.out.print("Enter Sender Student ID: ");
-                        String senderId = scanner.nextLine().trim();
-                        System.out.print("Enter Message Content  : ");
+                        System.out.print("Enter Message Content: ");
                         String content = scanner.nextLine();
                         try {
-                            Message sent = messageService.sendMessage(conv.getConversationId(), senderId, content);
+                            Message sent = messageService.sendMessage(
+                                    conv.getConversationId(), currentUser.getUserId(), content);
                             System.out.println("[OK] Message sent!");
                             System.out.println("     Message ID : " + sent.getMessageId());
                             System.out.println("     Timestamp  : " + sent.getSentAt());
-                        } catch (UnauthorizedConversationAccessException e) {
-                            System.out.println("[!] Access Denied: " + e.getMessage());
                         } catch (InvalidMessageException e) {
                             System.out.println("[!] Validation Error: " + e.getMessage());
                         }
                     }
                     case "3" -> {
-                        System.out.print("Enter Your Student ID to verify access: ");
-                        String requesterId = scanner.nextLine().trim();
-                        try {
-                            Optional<Message> latest = messageService.getLatestMessage(conv.getConversationId(), requesterId);
-                            if (latest.isPresent()) {
-                                Message m = latest.get();
-                                System.out.printf("Latest Message [%s at %s]:%n  \"%s\"%n",
-                                        m.getSenderId(), m.getSentAt(), m.getContent());
-                            } else {
-                                System.out.println("No messages sent yet in this conversation.");
-                            }
-                        } catch (UnauthorizedConversationAccessException e) {
-                            System.out.println("[!] Access Denied: " + e.getMessage());
+                        Optional<Message> latest = messageService.getLatestMessage(
+                                conv.getConversationId(), currentUser.getUserId());
+                        if (latest.isPresent()) {
+                            Message m = latest.get();
+                            System.out.printf("Latest Message [%s at %s]:%n  \"%s\"%n",
+                                    m.getSenderId(), m.getSentAt(), m.getContent());
+                        } else {
+                            System.out.println("No messages sent yet in this conversation.");
                         }
                     }
                     case "4" -> inChat = false;
@@ -308,6 +347,10 @@ public class Main {
             }
         } catch (ConversationNotFoundException e) {
             System.out.println("[!] Conversation not found: " + e.getMessage() + "\n");
+        } catch (UnauthorizedConversationAccessException e) {
+            System.out.println("[!] Access Denied: " + e.getMessage() + "\n");
+        } catch (UserNotFoundException e) {
+            System.out.println("[!] Student not found: " + e.getMessage() + "\n");
         } catch (DatabaseException e) {
             System.out.println("[!] Database Error: " + e.getMessage() + "\n");
         }

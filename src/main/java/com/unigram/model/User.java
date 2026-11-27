@@ -10,8 +10,9 @@ public class User {
     private final String userId;
     private String fullName;
     private String email;
+    private String passwordHash;
 
-    public User(String userId, String fullName, String email) {
+    public User(String userId, String fullName, String email, String passwordHash) {
         if (userId == null || userId.trim().isEmpty()) {
             throw new IllegalArgumentException("Student ID cannot be null or empty.");
         }
@@ -24,6 +25,11 @@ public class User {
         this.userId = userId.trim();
         this.fullName = fullName.trim();
         this.email = email.trim();
+        this.passwordHash = passwordHash != null ? passwordHash.trim() : "";
+    }
+
+    public User(String userId, String fullName, String email) {
+        this(userId, fullName, email, "");
     }
 
     public String getUserId() {
@@ -50,6 +56,14 @@ public class User {
             throw new IllegalArgumentException("Email cannot be null or empty.");
         }
         this.email = email.trim();
+    }
+
+    public String getPasswordHash() {
+        return passwordHash;
+    }
+
+    public void setPasswordHash(String passwordHash) {
+        this.passwordHash = passwordHash != null ? passwordHash.trim() : "";
     }
 
     @Override

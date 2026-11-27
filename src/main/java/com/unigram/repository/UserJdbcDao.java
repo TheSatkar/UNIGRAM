@@ -16,17 +16,18 @@ import java.util.Optional;
 public class UserJdbcDao {
 
     public boolean insert(Connection conn, User user) throws SQLException {
-        String sql = "INSERT INTO users (user_id, display_name, email) VALUES (?, ?, ?)";
+        String sql = "INSERT INTO users (user_id, display_name, email, password_hash) VALUES (?, ?, ?, ?)";
         try (PreparedStatement stmt = conn.prepareStatement(sql)) {
             stmt.setString(1, user.getUserId());
             stmt.setString(2, user.getFullName());
             stmt.setString(3, user.getEmail());
+            stmt.setString(4, user.getPasswordHash());
             return stmt.executeUpdate() > 0;
         }
     }
 
     public Optional<User> findById(Connection conn, String userId) throws SQLException {
-        String sql = "SELECT user_id, display_name, email FROM users WHERE user_id = ?";
+        String sql = "SELECT user_id, display_name, email, password_hash FROM users WHERE user_id = ?";
         try (PreparedStatement stmt = conn.prepareStatement(sql)) {
             stmt.setString(1, userId);
             try (ResultSet rs = stmt.executeQuery()) {
@@ -39,7 +40,7 @@ public class UserJdbcDao {
     }
 
     public List<User> findAll(Connection conn) throws SQLException {
-        String sql = "SELECT user_id, display_name, email FROM users ORDER BY created_at ASC";
+        String sql = "SELECT user_id, display_name, email, password_hash FROM users ORDER BY created_at ASC";
         List<User> list = new ArrayList<>();
         try (PreparedStatement stmt = conn.prepareStatement(sql);
              ResultSet rs = stmt.executeQuery()) {
@@ -70,11 +71,21 @@ public class UserJdbcDao {
         }
     }
 
+    public boolean updatePasswordHash(Connection conn, String userId, String passwordHash) throws SQLException {
+        String sql = "UPDATE users SET password_hash = ? WHERE user_id = ?";
+        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setString(1, passwordHash);
+            stmt.setString(2, userId);
+            return stmt.executeUpdate() > 0;
+        }
+    }
+
     private User mapRow(ResultSet rs) throws SQLException {
         return new User(
                 rs.getString("user_id"),
                 rs.getString("display_name"),
-                rs.getString("email")
+                rs.getString("email"),
+                rs.getString("password_hash")
         );
     }
 }
